@@ -1,383 +1,189 @@
-/**
-* SERVIDOR CON SISTEMA DE INYECCIÓN REMOTA
-* Permite ejecutar scripts dinámicamente en Roblox
-*/
-
-import express from 'express';
-import cors from 'cors';
-import fs from 'fs-extra';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuidv4 } from 'uuid';  // ← NUEVA LÍNEA IMPORTANTE
+const express = require('express');
+const axios = require('axios');
+const fs = require('fs');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
-const SCRIPTS_DIR = '/tmp/roblox-scripts';
-const CONFIG_FILE = '/tmp/server-config.json';
+let proxies = [];
+let proxyIndex = 0;
 
-let config = {
-   scripts: {},
-   executionHistory: [],
-   pendingExecutions: {},  // ← NUEVA - Guarda scripts por ejecutar
-   lastUpdated: new Date().toISOString()
-};
-
-// ============================================================================
-// INICIALIZACIÓN
-// ============================================================================
-
-async function initialize() {
-   try {
-       await fs.ensureDir(SCRIPTS_DIR);
-       
-       if (await fs.pathExists(CONFIG_FILE)) {
-           config = await fs.readJson(CONFIG_FILE);
-       } else {
-           await fs.writeJson(CONFIG_FILE, config);
-       }
-       
-       console.log('✓ Servidor inicializado');
-       console.log(`📁 Directorio: ${SCRIPTS_DIR}`);
-   } catch (error) {
-       console.error('Error:', error);
-   }
+function loadProxies() {
+  try {
+    const raw = fs.readFileSync('proxies.txt', 'utf8');
+    proxies = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
+    console.log('Loaded ' + proxies.length + ' proxies from proxies.txt');
+  } catch (e) {
+    if (process.env.PROXIES) {
+      proxies = process.env.PROXIES.split(',').map(p => p.trim()).filter(Boolean);
+      console.log('Loaded ' + proxies.length + ' proxies from env');
+    } else {
+      console.log('No proxies loaded - running direct');
+    }
+  }
 }
 
-// ============================================================================
-// VALIDACIÓN LUA
-// ============================================================================
-
-function validateLua(code) {
-   const errors = [];
-   
-   const brackets = { '(': 0, '[': 0, '{': 0 };
-   const closing = { ')': '(', ']': '[', '}': '{' };
-   
-   for (let i = 0; i < code.length; i++) {
-       const char = code[i];
-       if (brackets.hasOwnProperty(char)) {
-           brackets[char]++;
-       } else if (closing.hasOwnProperty(char)) {
-           brackets[closing[char]]--;
-       }
-   }
-   
-   Object.entries(brackets).forEach(([bracket, count]) => {
-       if (count > 0) errors.push(`${count} '${bracket}' sin cerrar`);
-       if (count < 0) errors.push(`'${bracket}' cerrado sin abrir`);
-   });
-   
-   return { isValid: errors.length === 0, errors };
+function parseProxy(str) {
+  if (!str) return null;
+  const s = str.trim();
+  if (s.includes('@')) {
+    const at = s.lastIndexOf('@');
+    const left = s.slice(0, at);
+    const right = s.slice(at + 1);
+    const parts = right.split(':');
+    if (parts.length < 2) return null;
+    const host = parts[0];
+    const port = parseInt(parts[1]);
+    const colon = left.indexOf(':');
+    if (colon === -1) return { host, port, username: null, password: null };
+    return { host, port, username: left.slice(0, colon), password: left.slice(colon + 1) };
+  }
+  const parts = s.split(':');
+  if (parts.length === 4) {
+    const secondIsPort = !isNaN(parseInt(parts[1])) && parts[1].length <= 5;
+    if (secondIsPort) return { host: parts[0], port: parseInt(parts[1]), username: parts[2], password: parts[3] };
+    return { host: parts[2], port: parseInt(parts[3]), username: parts[0], password: parts[1] };
+  }
+  if (parts.length === 2) return { host: parts[0], port: parseInt(parts[1]), username: null, password: null };
+  return null;
 }
 
-// ============================================================================
-// RUTAS API - BÁSICAS
-// ============================================================================
+function getProxyAgent() {
+  if (proxies.length === 0) return undefined;
+  const raw = proxies[proxyIndex % proxies.length];
+  proxyIndex++;
+  const p = parseProxy(raw);
+  if (!p) return undefined;
+  const auth = p.username && p.password ? p.username + ':' + p.password + '@' : '';
+  return new HttpsProxyAgent('http://' + auth + p.host + ':' + p.port);
+}
 
-app.get('/api/health', (req, res) => {
-   res.json({
-       status: 'ok',
-       timestamp: new Date().toISOString(),
-       version: '3.0.0'
-   });
+const rateLimits = {};
+function isRL(platform) {
+  if (!rateLimits[platform]) return false;
+  if (Date.now() > rateLimits[platform]) { delete rateLimits[platform]; return false; }
+  return true;
+}
+function setRL(platform, ms) {
+  rateLimits[platform] = Date.now() + ms;
+  console.log('Rate limited [' + platform + '] cooldown ' + (ms / 1000) + 's');
+}
+
+const TIMEOUT = 12000;
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36';
+
+async function checkRoblox(name) {
+  if (isRL('roblox')) return { rateLimited: true };
+  try {
+    const r = await axios.get(
+      'https://auth.roblox.com/v1/usernames/validate?Username=' + encodeURIComponent(name) + '&Birthday=2000-01-01',
+      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': UA } }
+    );
+    return { available: r.data.code === 0 };
+  } catch (e) {
+    if (e.response && e.response.status === 429) { setRL('roblox', 90000); return { rateLimited: true }; }
+    return { available: false, error: e.code || e.message };
+  }
+}
+
+async function checkDiscord(name) {
+  if (isRL('discord')) return { rateLimited: true };
+  try {
+    const r = await axios.post(
+      'https://discord.com/api/v9/auth/verify-username',
+      { username: name },
+      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'Content-Type': 'application/json', 'User-Agent': UA } }
+    );
+    return { available: r.data.taken === false };
+  } catch (e) {
+    if (e.response && e.response.status === 429) { setRL('discord', 120000); return { rateLimited: true }; }
+    return { available: false, error: e.code || e.message };
+  }
+}
+
+async function checkTikTok(name) {
+  if (isRL('tiktok')) return { rateLimited: true };
+  try {
+    const r = await axios.get(
+      'https://www.tiktok.com/api/user/detail/?uniqueId=' + encodeURIComponent(name) + '&aid=1988',
+      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': UA, 'Referer': 'https://www.tiktok.com/' } }
+    );
+    return { available: !r.data.userInfo || !r.data.userInfo.user || !r.data.userInfo.user.id };
+  } catch (e) {
+    if (e.response && e.response.status === 429) { setRL('tiktok', 180000); return { rateLimited: true }; }
+    if (e.response && e.response.status === 404) return { available: true };
+    return { available: false, error: e.code || e.message };
+  }
+}
+
+async function checkInstagram(name) {
+  if (isRL('instagram')) return { rateLimited: true };
+  try {
+    const r = await axios.get(
+      'https://www.instagram.com/api/v1/users/web_profile_info/?username=' + encodeURIComponent(name),
+      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)', 'X-IG-App-ID': '936619743392459', 'Referer': 'https://www.instagram.com/' } }
+    );
+    return { available: !r.data.data || !r.data.data.user };
+  } catch (e) {
+    if (e.response && e.response.status === 429) { setRL('instagram', 300000); return { rateLimited: true }; }
+    if (e.response && e.response.status === 404) return { available: true };
+    return { available: false, error: e.code || e.message };
+  }
+}
+
+const checkers = { roblox: checkRoblox, discord: checkDiscord, tiktok: checkTikTok, instagram: checkInstagram };
+
+app.get('/check/:platform/:name', async (req, res) => {
+  const platform = req.params.platform;
+  const name = req.params.name;
+  if (!checkers[platform]) return res.status(400).json({ error: 'Unknown platform' });
+  const result = await checkers[platform](name);
+  console.log('[' + platform + '] @' + name + ' ->', JSON.stringify(result));
+  res.json(result);
 });
 
-app.get('/api/scripts', async (req, res) => {
-   try {
-       const scripts = {};
-       const files = await fs.readdir(SCRIPTS_DIR);
-       
-       for (const file of files) {
-           if (file.endsWith('.lua')) {
-               const name = file.replace('.lua', '');
-               scripts[name] = await fs.readFile(path.join(SCRIPTS_DIR, file), 'utf-8');
-           }
-       }
-       
-       res.json({ success: true, scripts });
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
+app.post('/check-bulk', async (req, res) => {
+  const names = req.body.names || [];
+  const platforms = req.body.platforms || [];
+  if (names.length > 100) return res.status(400).json({ error: 'Max 100 names' });
+  const results = {};
+  for (const name of names) {
+    results[name] = {};
+    for (const p of platforms) {
+      if (checkers[p]) results[name][p] = await checkers[p](name);
+    }
+  }
+  res.json(results);
 });
 
-app.post('/api/scripts', async (req, res) => {
-   const { scripts: uploadedScripts } = req.body;
-   
-   try {
-       let saved = 0;
-       
-       for (const [name, code] of Object.entries(uploadedScripts || {})) {
-           const validation = validateLua(code);
-           
-           if (!validation.isValid) continue;
-           
-           const filePath = path.join(SCRIPTS_DIR, `${name}.lua`);
-           await fs.writeFile(filePath, code, 'utf-8');
-           
-           config.scripts[name] = {
-               savedAt: new Date().toISOString(),
-               size: new Blob([code]).size
-           };
-           
-           saved++;
-       }
-       
-       config.lastUpdated = new Date().toISOString();
-       await fs.writeJson(CONFIG_FILE, config);
-       
-       res.json({ success: true, saved });
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
+app.get('/reload-proxies', (req, res) => {
+  loadProxies();
+  res.json({ ok: true, proxies: proxies.length });
 });
 
-app.post('/api/validate', (req, res) => {
-   const { code } = req.body;
-   
-   if (!code) {
-       return res.status(400).json({ success: false, error: 'Sin código' });
-   }
-   
-   const validation = validateLua(code);
-   
-   res.json({
-       success: true,
-       isValid: validation.isValid,
-       errors: validation.errors,
-       lines: code.split('\n').length
-   });
+app.get('/ping', (req, res) => {
+  res.json({ ok: true, proxies: proxies.length, rateLimits: rateLimits, uptime: Math.floor(process.uptime()) + 's' });
 });
 
-app.get('/api/scripts/:name', async (req, res) => {
-   try {
-       const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
-       
-       if (!await fs.pathExists(filePath)) {
-           return res.status(404).json({ success: false, error: 'No encontrado' });
-       }
-       
-       const code = await fs.readFile(filePath, 'utf-8');
-       res.json({ success: true, code });
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
-});
-
-app.delete('/api/scripts/:name', async (req, res) => {
-   try {
-       const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
-       
-       if (await fs.pathExists(filePath)) {
-           await fs.remove(filePath);
-           delete config.scripts[req.params.name];
-           await fs.writeJson(CONFIG_FILE, config);
-           
-           res.json({ success: true, message: 'Eliminado' });
-       } else {
-           res.status(404).json({ success: false, error: 'No encontrado' });
-       }
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
-});
-
-// ============================================================================
-// RUTAS API - INYECCIÓN REMOTA (NUEVAS)
-// ============================================================================
-
-/**
-* ⭐ EJECUTAR SCRIPT REMOTAMENTE
-* POST /api/execute-remote
-*/
-app.post('/api/execute-remote', async (req, res) => {
-   const { scriptName, code, parameters } = req.body;
-   
-   if (!scriptName || !code) {
-       return res.status(400).json({ success: false, error: 'Falta código o nombre' });
-   }
-   
-   try {
-       // Validar Lua
-       const validation = validateLua(code);
-       if (!validation.isValid) {
-           return res.json({
-               success: false,
-               error: `Errores de sintaxis: ${validation.errors.join(', ')}`
-           });
-       }
-       
-       // ← CREAR ID ÚNICO PARA ESTA EJECUCIÓN
-       const executionId = uuidv4();
-       
-       // ← GUARDAR COMO "PENDIENTE" (esperando a Roblox)
-       config.pendingExecutions[executionId] = {
-           id: executionId,
-           name: scriptName,
-           code: code,
-           parameters: parameters || {},
-           createdAt: new Date().toISOString(),
-           status: 'pending'
-       };
-       
-       // Guardar script
-       const filePath = path.join(SCRIPTS_DIR, `${scriptName}.lua`);
-       await fs.writeFile(filePath, code, 'utf-8');
-       
-       config.scripts[scriptName] = {
-           savedAt: new Date().toISOString(),
-           size: code.length
-       };
-       
-       await fs.writeJson(CONFIG_FILE, config);
-       
-       res.json({
-           success: true,
-           executionId: executionId,
-           message: 'Script en espera de inyección',
-           waitingFor: 'Roblox Inyector'
-       });
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
-});
-
-/**
-* ⭐ OBTENER SCRIPTS PENDIENTES
-* GET /api/pending-executions
-* (El Inyector de Roblox consulta esto cada 1 segundo)
-*/
-app.get('/api/pending-executions', (req, res) => {
-   const pending = Object.values(config.pendingExecutions)
-       .filter(exec => exec.status === 'pending')
-       .slice(0, 5); // Máximo 5 a la vez
-   
-   res.json({
-       success: true,
-       count: pending.length,
-       executions: pending
-   });
-});
-
-/**
-* ⭐ RECIBIR RESULTADO DE EJECUCIÓN
-* POST /api/execution/:id/result
-* (El Inyector de Roblox envía el resultado aquí)
-*/
-app.post('/api/execution/:id/result', (req, res) => {
-   const { id } = req.params;
-   const { success, output, error, executionTime } = req.body;
-   
-   try {
-       if (config.pendingExecutions[id]) {
-           config.pendingExecutions[id].status = success ? 'completed' : 'error';
-           config.pendingExecutions[id].result = {
-               success: success,
-               output: output,
-               error: error,
-               executionTime: executionTime
-           };
-           config.pendingExecutions[id].completedAt = new Date().toISOString();
-           
-           // Guardar en historial
-           config.executionHistory.push({
-               executionId: id,
-               scriptName: config.pendingExecutions[id].name,
-               timestamp: new Date().toISOString(),
-               success: success,
-               output: output
-           });
-           
-           if (config.executionHistory.length > 100) {
-               config.executionHistory = config.executionHistory.slice(-100);
-           }
-           
-           fs.writeJson(CONFIG_FILE, config);
-       }
-       
-       res.json({ success: true, message: 'Resultado recibido' });
-   } catch (error) {
-       res.status(500).json({ success: false, error: error.message });
-   }
-});
-
-/**
-* ⭐ OBTENER ESTADO DE EJECUCIÓN
-* GET /api/execution/:id/status
-*/
-app.get('/api/execution/:id/status', (req, res) => {
-   const { id } = req.params;
-   
-   const execution = config.pendingExecutions[id];
-   
-   if (!execution) {
-       return res.status(404).json({ success: false, error: 'No encontrado' });
-   }
-   
-   res.json({
-       success: true,
-       execution: {
-           id: execution.id,
-           scriptName: execution.name,
-           status: execution.status,
-           result: execution.result || null,
-           createdAt: execution.createdAt,
-           completedAt: execution.completedAt
-       }
-   });
-});
-
-/**
-* ⭐ LISTAR EJECUCIONES RECIENTES
-* GET /api/execution-history
-*/
-app.get('/api/execution-history', (req, res) => {
-   res.json({
-       success: true,
-       count: config.executionHistory.length,
-       history: config.executionHistory.slice(-20)
-   });
-});
-
-// ============================================================================
-// RUTAS API - INFORMACIÓN
-// ============================================================================
-
-app.get('/api/info', (req, res) => {
-   res.json({
-       name: 'Roblox Inyector Remoto',
-       version: '3.0.0',
-       scriptsCount: Object.keys(config.scripts).length,
-       executionCount: config.executionHistory.length,
-       pendingCount: Object.values(config.pendingExecutions)
-           .filter(e => e.status === 'pending').length,
-       lastUpdated: config.lastUpdated
-   });
+app.get('/stats', (req, res) => {
+  res.json({ proxies: proxies.length, rateLimits: rateLimits, uptime: Math.floor(process.uptime()) + 's' });
 });
 
 app.get('/', (req, res) => {
-   res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  res.json({ status: 'Username Sniper Backend running', proxies: proxies.length });
 });
 
-// ============================================================================
-// INICIAR
-// ============================================================================
-
-async function start() {
-   await initialize();
-   
-   app.listen(PORT, () => {
-       console.log('\n╔════════════════════════════════════╗');
-       console.log('║  🚀 INYECTOR REMOTO - ACTIVO      ║');
-       console.log('╚════════════════════════════════════╝\n');
-       console.log(`🌐 Puerto: ${PORT}`);
-       console.log(`✓ Sistema de inyección remota activo\n`);
-   });
-}
-
-start().catch(console.error);
+app.listen(PORT, function() {
+  console.log('Username Sniper Backend running on port ' + PORT);
+  loadProxies();
+});
