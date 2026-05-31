@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 Roblox Script Manager - Mobile</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 10px;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            height: 100vh;
+            padding: 10px;
+        }
+
+        /* Responsive para mobile */
+        @media (max-width: 768px) {
+            .container {
+                grid-template-columns: 1fr;
+                height: auto;
+                gap: 10px;
+            }
+        }
+
+        .panel {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+        }
+
+        .header h2 {
+            font-size: 1.5em;
+            color: #667eea;
+            flex: 1;
+        }
+
+        .status {
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: bold;
+        }
+
+        .status.connected {
+            background: #4ade80;
+            color: white;
+        }
+
+        .status.disconnected {
+            background: #ef4444;
+            color: white;
+        }
+
+        /* Panel de Scripts */
+        .scripts-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .scripts-list {
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        .script-item {
+            padding: 12px;
+            margin: 8px 0;
+            background: #f3f4f6;
+            border-left: 4px solid #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .script-item:hover {
+            background: #e5e7eb;
+            transform: translateX(5px);
+        }
+
+        .script-item.active {
+            background: #667eea;
+            color: white;
+            border-left-color: white;
+        }
+
+        .script-name {
+            font-weight: bold;
+            flex: 1;
+        }
+
+        .script-size {
+            font-size: 0.8em;
+            opacity: 0.7;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            flex: 1;
+            min-width: 100px;
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.95em;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #333;
+        }
+
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+
+        .btn-danger {
+            background: #ef4444;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+
+        .btn-success {
+            background: #22c55e;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #16a34a;
+        }
+
+        /* Editor */
+        .editor-panel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .editor-header {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .editor-header input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        textarea {
+            flex: 1;
+            padding: 15px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.95em;
+            resize: none;
+            line-height: 1.5;
+        }
+
+        /* Info Panel */
+        .info-panel {
+            background: #f0f9ff;
+            border-left: 4px solid #0ea5e9;
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .info-panel h4 {
+            color: #0ea5e9;
+            margin-bottom: 8px;
+        }
+
+        .info-panel p {
+            margin: 5px 0;
+            color: #64748b;
+        }
+
+        /* Dialog/Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-content h3 {
+            margin-bottom: 15px;
+            color: #667eea;
+        }
+
+        .modal-content input,
+        .modal-content textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-buttons button {
+            flex: 1;
+        }
+
+        /* Console/Output */
+        .console {
+            background: #1f2937;
+            color: #10b981;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
+        .console-log {
+            margin: 3px 0;
+        }
+
+        .console-error {
+            color: #ef4444;
+        }
+
+        .console-success {
+            color: #10b981;
+        }
+
+        .console-warn {
+            color: #f59e0b;
+        }
+
+        /* Loading */
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-size: 0.75em;
+            font-weight: bold;
+        }
+
+        .badge.unsaved {
+            background: #ef4444;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Panel Izquierdo: Lista de Scripts -->
+        <div class="panel scripts-panel">
+            <div class="header">
+                <h2>📝 Mis Scripts</h2>
+                <span class="status disconnected" id="status">Desconectado</span>
+            </div>
+
+            <div class="scripts-list" id="scriptsList"></div>
+
+            <div class="button-group">
+                <button class="btn-primary" onclick="openNewScriptModal()">
+                    ➕ Nuevo Script
+                </button>
+                <button class="btn-secondary" onclick="syncScripts()">
+                    🔄 Sincronizar
+                </button>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value" id="scriptCount">0</div>
+                    <div class="stat-label">Scripts</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value" id="totalSize">0KB</div>
+                    <div class="stat-label">Tamaño Total</div>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <h4>💡 Tip</h4>
+                <p>Usa <strong>@exec</strong> en el nombre para marcarlo como ejecutable.</p>
+                <p>Ejemplo: <code>fly@exec</code></p>
+            </div>
+        </div>
+
+        <!-- Panel Derecho: Editor -->
+        <div class="panel editor-panel">
+            <div class="header">
+                <h2>✏️ Editor</h2>
+            </div>
+
+            <div class="editor-header">
+                <input 
+                    type="text" 
+                    id="scriptName" 
+                    placeholder="Nombre del script..." 
+                    value="nuevo_script.lua"
+                >
+                <button class="btn-success" onclick="saveScript()" style="flex: 0">
+                    💾 Guardar
+                </button>
+            </div>
+
+            <textarea 
+                id="scriptCode" 
+                placeholder="Escribe tu código Lua aquí...
+
+-- Ejemplo:
+local function hola()
+    print('¡Hola Roblox!')
+end
+
+hola()"
+            ></textarea>
+
+            <div class="button-group" style="margin-top: 10px;">
+                <button class="btn-success" onclick="executeScript()">
+                    ⚡ Ejecutar en Roblox
+                </button>
+                <button class="btn-primary" onclick="validateScript()">
+                    ✓ Validar
+                </button>
+                <button class="btn-danger" onclick="deleteCurrentScript()">
+                    🗑️ Eliminar
+                </button>
+            </div>
+
+            <div class="console" id="console">
+                <div class="console-log">Consola lista...</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Nuevo Script -->
+    <div class="modal" id="newScriptModal">
+        <div class="modal-content">
+            <h3>📝 Crear Nuevo Script</h3>
+            <input 
+                type="text" 
+                id="newScriptName" 
+                placeholder="Nombre del script (ej: myscript.lua)"
+            >
+            <select id="scriptTemplate" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #d1d5db; border-radius: 8px;">
+                <option value="">-- Plantilla --</option>
+                <option value="empty">Script Vacío</option>
+                <option value="function">Función Simple</option>
+                <option value="playerhandler">Manejador de Jugadores</option>
+                <option value="npc">NPC Walker</option>
+            </select>
+            <div class="modal-buttons">
+                <button class="btn-primary" onclick="createNewScript()">Crear</button>
+                <button class="btn-secondary" onclick="closeNewScriptModal()">Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Script Principal -->
+    <script>
+        // ========== VARIABLES GLOBALES ==========
+        let scripts = {};
+        let currentScript = null;
+        const API_BASE = 'http://localhost:3000'; // Cambiar por URL del servidor deployado
+
+        // ========== TEMPLATES ==========
+        const templates = {
+            empty: `-- Script nuevo
+-- Escribe tu código aquí`,
+            function: `local function miFunc(param)
+    print("Parámetro: " .. param)
+    return param
+end
+
+return miFunc`,
+            playerhandler: `local Players = game:GetService("Players")
+
+local function onPlayerAdded(player)
+    print(player.Name .. " se conectó")
+end
+
+local function onPlayerRemoving(player)
+    print(player.Name .. " se desconectó")
+end
+
+Players.PlayerAdded:Connect(onPlayerAdded)
+Players.PlayerRemoving:Connect(onPlayerRemoving)`,
+            npc: `local NPC = {}
+NPC.speed = 16
+
+function NPC.new(model)
+    local self = setmetatable({}, {__index = NPC})
+    self.model = model
+    self.humanoid = model:WaitForChild("Humanoid")
+    return self
+end
+
+return NPC`
+        };
+
+        // ========== INICIALIZACIÓN ==========
+        window.addEventListener('load', () => {
+            loadScripts();
+            checkServerConnection();
+            setInterval(checkServerConnection, 5000);
+        });
+
+        // ========== FUNCIONES DE CONEXIÓN ==========
+        async function checkServerConnection() {
+            try {
+                const response = await fetch(API_BASE + '/api/health');
+                if (response.ok) {
+                    updateStatus(true);
+                } else {
+                    updateStatus(false);
+                }
+            } catch (error) {
+                updateStatus(false);
+            }
+        }
+
+        function updateStatus(connected) {
+            const statusEl = document.getElementById('status');
+            if (connected) {
+                statusEl.className = 'status connected';
+                statusEl.textContent = '✓ Conectado';
+            } else {
+                statusEl.className = 'status disconnected';
+                statusEl.textContent = '✗ Desconectado';
+            }
+        }
+
+        // ========== GESTIÓN DE SCRIPTS ==========
+        function loadScripts() {
+            const saved = localStorage.getItem('robloxScripts');
+            scripts = saved ? JSON.parse(saved) : {};
+            renderScriptsList();
+        }
+
+        function saveScripts() {
+            localStorage.setItem('robloxScripts', JSON.stringify(scripts));
+            renderScriptsList();
+        }
+
+        function renderScriptsList() {
+            const listEl = document.getElementById('scriptsList');
+            listEl.innerHTML = '';
+
+            let totalSize = 0;
+            Object.entries(scripts).forEach(([name, code]) => {
+                totalSize += new Blob([code]).size;
+                const item = document.createElement('div');
+                item.className = `script-item ${currentScript === name ? 'active' : ''}`;
+                item.onclick = () => loadScript(name);
+
+                const size = (new Blob([code]).size / 1024).toFixed(2);
+                item.innerHTML = `
+                    <div>
+                        <div class="script-name">${name}</div>
+                        <div class="script-size">${size} KB</div>
+                    </div>
+                    ${name.includes('@exec') ? '<span class="badge">EXEC</span>' : ''}
+                `;
+                listEl.appendChild(item);
+            });
+
+            document.getElementById('scriptCount').textContent = Object.keys(scripts).length;
+            document.getElementById('totalSize').textContent = (totalSize / 1024).toFixed(1) + 'KB';
+        }
+
+        function loadScript(name) {
+            currentScript = name;
+            document.getElementById('scriptName').value = name;
+            document.getElementById('scriptCode').value = scripts[name] || '';
+            renderScriptsList();
+        }
+
+        function saveScript() {
+            const name = document.getElementById('scriptName').value.trim();
+            const code = document.getElementById('scriptCode').value;
+
+            if (!name) {
+                addConsoleLog('Error: Nombre del script vacío', 'error');
+                return;
+            }
+
+            scripts[name] = code;
+            currentScript = name;
+            saveScripts();
+            addConsoleLog(`✓ Script "${name}" guardado`, 'success');
+        }
+
+        function deleteCurrentScript() {
+            if (!currentScript) {
+                addConsoleLog('Error: No hay script seleccionado', 'error');
+                return;
+            }
+
+            if (confirm(`¿Eliminar "${currentScript}"?`)) {
+                delete scripts[currentScript];
+                currentScript = null;
+                saveScripts();
+                document.getElementById('scriptName').value = '';
+                document.getElementById('scriptCode').value = '';
+                addConsoleLog('Script eliminado', 'success');
+            }
+        }
+
+        // ========== MODAL NUEVO SCRIPT ==========
+        function openNewScriptModal() {
+            document.getElementById('newScriptModal').classList.add('active');
+        }
+
+        function closeNewScriptModal() {
+            document.getElementById('newScriptModal').classList.remove('active');
+        }
+
+        function createNewScript() {
+            const name = document.getElementById('newScriptName').value.trim();
+            const templateKey = document.getElementById('scriptTemplate').value;
+
+            if (!name) {
+                alert('Ingresa un nombre para el script');
+                return;
+            }
+
+            if (scripts[name]) {
+                alert('Ya existe un script con ese nombre');
+                return;
+            }
+
+            const code = templateKey ? templates[templateKey] : templates.empty;
+            scripts[name] = code;
+            currentScript = name;
+            saveScripts();
+            loadScript(name);
+            closeNewScriptModal();
+            addConsoleLog(`✓ Script "${name}" creado`, 'success');
+
+            // Limpiar inputs
+            document.getElementById('newScriptName').value = '';
+            document.getElementById('scriptTemplate').value = '';
+        }
+
+        // ========== VALIDACIÓN Y EJECUCIÓN ==========
+        async function validateScript() {
+            const code = document.getElementById('scriptCode').value;
+
+            try {
+                const response = await fetch(API_BASE + '/api/validate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+
+                const result = await response.json();
+
+                if (result.isValid) {
+                    addConsoleLog('✓ Sintaxis válida', 'success');
+                } else {
+                    result.errors.forEach(err => {
+                        addConsoleLog(`✗ ${err}`, 'error');
+                    });
+                }
+            } catch (error) {
+                addConsoleLog('No se pudo conectar al servidor', 'error');
+            }
+        }
+
+        async function executeScript() {
+            const name = document.getElementById('scriptName').value;
+            const code = document.getElementById('scriptCode').value;
+
+            if (!name.includes('@exec')) {
+                addConsoleLog('⚠️ Marca el script con @exec para ejecutar', 'warn');
+                return;
+            }
+
+            addConsoleLog('⚡ Enviando a Roblox...', 'warn');
+
+            try {
+                const response = await fetch(API_BASE + '/api/execute', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, code })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addConsoleLog('✓ Ejecutado en Roblox', 'success');
+                } else {
+                    addConsoleLog(`✗ ${result.error}`, 'error');
+                }
+            } catch (error) {
+                addConsoleLog('No se pudo ejecutar el script', 'error');
+            }
+        }
+
+        async function syncScripts() {
+            addConsoleLog('🔄 Sincronizando...', 'warn');
+
+            try {
+                const response = await fetch(API_BASE + '/api/scripts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ scripts })
+                });
+
+                const result = await response.json();
+                addConsoleLog(`✓ ${Object.keys(scripts).length} scripts sincronizados`, 'success');
+            } catch (error) {
+                addConsoleLog('Error al sincronizar', 'error');
+            }
+        }
+
+        // ========== CONSOLA ==========
+        function addConsoleLog(message, type = 'log') {
+            const console = document.getElementById('console');
+            const log = document.createElement('div');
+            log.className = `console-log console-${type}`;
+            log.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            console.appendChild(log);
+            console.scrollTop = console.scrollHeight;
+
+            // Mantener máximo 50 logs
+            while (console.children.length > 50) {
+                console.removeChild(console.firstChild);
+            }
+        }
+    </script>
+</body>
+</html>
