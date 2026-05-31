@@ -1,921 +1,701 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>💻 Script Editor Pro - Multi-Lenguaje</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>💻 Script Inyector - Roblox</title>
+   <style>
+       * {
+           margin: 0;
+           padding: 0;
+           box-sizing: border-box;
+       }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 10px;
-        }
+       body {
+           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+           min-height: 100vh;
+           padding: 10px;
+       }
 
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            height: 100vh;
-        }
+       .container {
+           max-width: 1200px;
+           margin: 0 auto;
+           display: grid;
+           grid-template-columns: 1fr 1fr;
+           gap: 15px;
+           height: 100vh;
+       }
 
-        @media (max-width: 768px) {
-            .container {
-                grid-template-columns: 1fr;
-                height: auto;
-            }
-        }
+       @media (max-width: 768px) {
+           .container {
+               grid-template-columns: 1fr;
+               height: auto;
+           }
+       }
 
-        .panel {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            display: flex;
-            flex-direction: column;
-            overflow: hidden;
-        }
+       .panel {
+           background: white;
+           border-radius: 15px;
+           padding: 20px;
+           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+           display: flex;
+           flex-direction: column;
+           overflow: hidden;
+       }
 
-        .header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #667eea;
-        }
+       .header {
+           display: flex;
+           align-items: center;
+           gap: 10px;
+           margin-bottom: 15px;
+           padding-bottom: 10px;
+           border-bottom: 2px solid #667eea;
+       }
 
-        .header h2 {
-            font-size: 1.4em;
-            color: #667eea;
-            flex: 1;
-        }
+       .header h2 {
+           font-size: 1.4em;
+           color: #667eea;
+           flex: 1;
+       }
 
-        .status {
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            font-weight: bold;
-            background: #10b981;
-            color: white;
-        }
+       .status {
+           padding: 6px 12px;
+           border-radius: 20px;
+           font-size: 0.8em;
+           font-weight: bold;
+           background: #10b981;
+           color: white;
+       }
 
-        /* Selector de lenguaje */
-        .language-selector {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-            gap: 8px;
-            margin-bottom: 15px;
-        }
+       .scripts-list {
+           flex: 1;
+           overflow-y: auto;
+           margin-bottom: 10px;
+           border: 1px solid #e5e7eb;
+           border-radius: 10px;
+           padding: 10px;
+       }
 
-        .lang-btn {
-            padding: 8px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            background: white;
-            cursor: pointer;
-            font-weight: bold;
-            font-size: 0.85em;
-            transition: all 0.3s;
-            text-align: center;
-        }
+       .script-item {
+           padding: 12px;
+           margin: 8px 0;
+           background: #f3f4f6;
+           border-left: 4px solid #667eea;
+           border-radius: 8px;
+           cursor: pointer;
+           transition: all 0.3s;
+           display: flex;
+           justify-content: space-between;
+           align-items: center;
+       }
 
-        .lang-btn:hover {
-            border-color: #667eea;
-        }
+       .script-item:hover {
+           background: #e5e7eb;
+           transform: translateX(5px);
+       }
 
-        .lang-btn.active {
-            background: #667eea;
-            color: white;
-            border-color: #667eea;
-        }
+       .script-item.active {
+           background: #667eea;
+           color: white;
+       }
 
-        /* Lista de scripts */
-        .scripts-list {
-            flex: 1;
-            overflow-y: auto;
-            margin-bottom: 10px;
-            border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 10px;
-        }
+       .script-name {
+           font-weight: bold;
+       }
 
-        .script-item {
-            padding: 12px;
-            margin: 8px 0;
-            background: #f3f4f6;
-            border-left: 4px solid #667eea;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+       .script-size {
+           font-size: 0.8em;
+           opacity: 0.7;
+       }
 
-        .script-item:hover {
-            background: #e5e7eb;
-            transform: translateX(5px);
-        }
+       .button-group {
+           display: flex;
+           gap: 10px;
+           flex-wrap: wrap;
+       }
 
-        .script-item.active {
-            background: #667eea;
-            color: white;
-        }
+       button {
+           flex: 1;
+           min-width: 100px;
+           padding: 12px 16px;
+           border: none;
+           border-radius: 8px;
+           font-weight: bold;
+           cursor: pointer;
+           font-size: 0.95em;
+           transition: all 0.3s;
+       }
 
-        .script-info {
-            flex: 1;
-        }
+       .btn-primary {
+           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+           color: white;
+       }
 
-        .script-name {
-            font-weight: bold;
-        }
+       .btn-primary:hover {
+           transform: translateY(-2px);
+           box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+       }
 
-        .script-lang {
-            font-size: 0.75em;
-            opacity: 0.7;
-            margin-top: 4px;
-        }
+       .btn-secondary {
+           background: #e5e7eb;
+           color: #333;
+       }
 
-        .script-lang-badge {
-            background: rgba(255, 255, 255, 0.3);
-            padding: 2px 6px;
-            border-radius: 3px;
-            margin-left: 5px;
-        }
+       .btn-secondary:hover {
+           background: #d1d5db;
+       }
 
-        /* Botones */
-        .button-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
+       .btn-danger {
+           background: #ef4444;
+           color: white;
+       }
 
-        button {
-            flex: 1;
-            min-width: 100px;
-            padding: 12px 16px;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
-            cursor: pointer;
-            font-size: 0.95em;
-            transition: all 0.3s;
-        }
+       .btn-danger:hover {
+           background: #dc2626;
+       }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
+       .btn-success {
+           background: #22c55e;
+           color: white;
+       }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-        }
+       .editor-header {
+           display: flex;
+           gap: 10px;
+           margin-bottom: 10px;
+           flex-wrap: wrap;
+           align-items: center;
+       }
 
-        .btn-secondary {
-            background: #e5e7eb;
-            color: #333;
-        }
+       .editor-header input,
+       .editor-header textarea {
+           padding: 10px;
+           border: 1px solid #d1d5db;
+           border-radius: 8px;
+           font-size: 0.95em;
+       }
 
-        .btn-secondary:hover {
-            background: #d1d5db;
-        }
+       .editor-header input {
+           flex: 1;
+           min-width: 150px;
+       }
 
-        .btn-danger {
-            background: #ef4444;
-            color: white;
-        }
+       textarea {
+           flex: 1;
+           padding: 15px;
+           border: 1px solid #d1d5db;
+           border-radius: 8px;
+           font-family: 'Monaco', 'Courier New', monospace;
+           font-size: 0.95em;
+           resize: none;
+           line-height: 1.5;
+       }
 
-        .btn-danger:hover {
-            background: #dc2626;
-        }
+       .console {
+           background: #1f2937;
+           color: #10b981;
+           padding: 12px;
+           border-radius: 8px;
+           font-family: 'Monaco', 'Courier New', monospace;
+           font-size: 0.85em;
+           max-height: 150px;
+           overflow-y: auto;
+           margin-top: 10px;
+           line-height: 1.4;
+       }
 
-        .btn-success {
-            background: #22c55e;
-            color: white;
-        }
+       .console-log {
+           margin: 3px 0;
+       }
 
-        /* Editor */
-        .editor-header {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-            flex-wrap: wrap;
-            align-items: center;
-        }
+       .console-error {
+           color: #ef4444;
+       }
 
-        .editor-header input {
-            flex: 1;
-            min-width: 150px;
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1em;
-        }
+       .console-success {
+           color: #10b981;
+       }
 
-        .editor-header select {
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1em;
-        }
+       .console-warn {
+           color: #f59e0b;
+       }
 
-        textarea {
-            flex: 1;
-            padding: 15px;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.95em;
-            resize: none;
-            line-height: 1.5;
-        }
+       .console-info {
+           color: #3b82f6;
+       }
 
-        /* Console */
-        .console {
-            background: #1f2937;
-            color: #10b981;
-            padding: 12px;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.85em;
-            max-height: 150px;
-            overflow-y: auto;
-            margin-top: 10px;
-            line-height: 1.4;
-        }
+       .stats {
+           display: grid;
+           grid-template-columns: 1fr 1fr;
+           gap: 10px;
+           margin-top: 10px;
+       }
 
-        .console-log {
-            margin: 3px 0;
-        }
+       .stat {
+           background: #f3f4f6;
+           padding: 10px;
+           border-radius: 8px;
+           text-align: center;
+       }
 
-        .console-error {
-            color: #ef4444;
-        }
+       .stat-value {
+           font-size: 1.4em;
+           font-weight: bold;
+           color: #667eea;
+       }
 
-        .console-success {
-            color: #10b981;
-        }
+       .stat-label {
+           font-size: 0.8em;
+           color: #6b7280;
+           margin-top: 5px;
+       }
 
-        .console-warn {
-            color: #f59e0b;
-        }
+       .info-panel {
+           background: #f0f9ff;
+           border-left: 4px solid #0ea5e9;
+           padding: 12px;
+           border-radius: 8px;
+           margin-top: 10px;
+           font-size: 0.9em;
+       }
 
-        .console-info {
-            color: #3b82f6;
-        }
+       .info-panel h4 {
+           color: #0ea5e9;
+           margin-bottom: 8px;
+       }
 
-        /* Stats */
-        .stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
+       .info-panel p {
+           margin: 5px 0;
+           color: #64748b;
+       }
 
-        .stat {
-            background: #f3f4f6;
-            padding: 10px;
-            border-radius: 8px;
-            text-align: center;
-        }
+       .modal {
+           display: none;
+           position: fixed;
+           top: 0;
+           left: 0;
+           right: 0;
+           bottom: 0;
+           background: rgba(0, 0, 0, 0.5);
+           z-index: 1000;
+           align-items: center;
+           justify-content: center;
+       }
 
-        .stat-value {
-            font-size: 1.4em;
-            font-weight: bold;
-            color: #667eea;
-        }
+       .modal.active {
+           display: flex;
+       }
 
-        .stat-label {
-            font-size: 0.8em;
-            color: #6b7280;
-            margin-top: 5px;
-        }
+       .modal-content {
+           background: white;
+           padding: 25px;
+           border-radius: 15px;
+           max-width: 500px;
+           width: 90%;
+           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+       }
 
-        /* Info Panel */
-        .info-panel {
-            background: #f0f9ff;
-            border-left: 4px solid #0ea5e9;
-            padding: 12px;
-            border-radius: 8px;
-            margin-top: 10px;
-            font-size: 0.9em;
-        }
+       .modal-content h3 {
+           margin-bottom: 15px;
+           color: #667eea;
+       }
 
-        .info-panel h4 {
-            color: #0ea5e9;
-            margin-bottom: 8px;
-        }
+       .modal-content input,
+       .modal-content textarea {
+           width: 100%;
+           padding: 10px;
+           margin: 10px 0;
+           border: 1px solid #d1d5db;
+           border-radius: 8px;
+           font-size: 1em;
+       }
 
-        .info-panel p {
-            margin: 5px 0;
-            color: #64748b;
-        }
+       .modal-buttons {
+           display: flex;
+           gap: 10px;
+           margin-top: 20px;
+       }
 
-        /* Modal */
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            align-items: center;
-            justify-content: center;
-        }
+       .modal-buttons button {
+           flex: 1;
+       }
 
-        .modal.active {
-            display: flex;
-        }
-
-        .modal-content {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
-            max-width: 500px;
-            width: 90%;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal-content h3 {
-            margin-bottom: 15px;
-            color: #667eea;
-        }
-
-        .modal-content input,
-        .modal-content select {
-            width: 100%;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #d1d5db;
-            border-radius: 8px;
-            font-size: 1em;
-        }
-
-        .modal-buttons {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .modal-buttons button {
-            flex: 1;
-        }
-
-        .tag {
-            display: inline-block;
-            padding: 4px 8px;
-            background: #667eea;
-            color: white;
-            border-radius: 4px;
-            font-size: 0.75em;
-            margin-top: 5px;
-            margin-right: 5px;
-        }
-    </style>
+       .params-label {
+           font-size: 0.85em;
+           color: #6b7280;
+           margin-top: 5px;
+       }
+   </style>
 </head>
 <body>
-    <div class="container">
-        <!-- Panel Izquierdo: Scripts -->
-        <div class="panel">
-            <div class="header">
-                <h2>📚 Mis Scripts</h2>
-                <span class="status">✓ Listo</span>
-            </div>
-
-            <!-- Selector de lenguaje -->
-            <div class="language-selector" id="languageSelector"></div>
-
-            <div class="scripts-list" id="scriptsList"></div>
-
-            <div class="button-group">
-                <button class="btn-primary" onclick="openNewScriptModal()">
-                    ➕ Nuevo
-                </button>
-                <button class="btn-secondary" onclick="syncScripts()">
-                    🔄 Sincronizar
-                </button>
-            </div>
-
-            <div class="stats">
-                <div class="stat">
-                    <div class="stat-value" id="scriptCount">0</div>
-                    <div class="stat-label">Scripts</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="langCount">0</div>
-                    <div class="stat-label">Lenguajes</div>
-                </div>
-                <div class="stat">
-                    <div class="stat-value" id="totalSize">0KB</div>
-                    <div class="stat-label">Total</div>
-                </div>
-            </div>
-
-            <div class="info-panel">
-                <h4>💡 Tip</h4>
-                <p>Puedes crear scripts en cualquier lenguaje: Lua, Python, JavaScript, C#, etc.</p>
-                <p>Usa templates para empezar rápido.</p>
-            </div>
-        </div>
-
-        <!-- Panel Derecho: Editor -->
-        <div class="panel">
-            <div class="header">
-                <h2>✏️ Editor</h2>
-            </div>
-
-            <div class="editor-header">
-                <input 
-                    type="text" 
-                    id="scriptName" 
-                    placeholder="Nombre del script (ej: main.py)"
-                    value="nuevo_script.lua"
-                >
-                <select id="languageSelect" onchange="updateLanguage()">
-                    <option value="lua">Lua</option>
-                    <option value="python">Python</option>
-                    <option value="javascript">JavaScript</option>
-                    <option value="csharp">C#</option>
-                    <option value="cpp">C++</option>
-                    <option value="java">Java</option>
-                    <option value="other">Otro</option>
-                </select>
-            </div>
-
-            <div class="editor-header">
-                <button class="btn-success" onclick="saveScript()" style="flex: 0; margin: 0;">
-                    💾 Guardar
-                </button>
-                <button class="btn-primary" onclick="validateScript()" style="flex: 0; margin: 0;">
-                    ✓ Validar
-                </button>
-                <button class="btn-danger" onclick="deleteCurrentScript()" style="flex: 0; margin: 0;">
-                    🗑️ Eliminar
-                </button>
-            </div>
-
-            <textarea 
-                id="scriptCode" 
-                placeholder="Escribe tu código aquí...
-
-// Ejemplo Python:
-def hello():
-    print('¡Hola!')
-
-hello()"
-            ></textarea>
-
-            <div class="console" id="console">
-                <div class="console-log">📝 Consola lista...</div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Modal: Nuevo Script -->
-    <div class="modal" id="newScriptModal">
-        <div class="modal-content">
-            <h3>📝 Crear Nuevo Script</h3>
-            <input 
-                type="text" 
-                id="newScriptName" 
-                placeholder="Nombre (ej: main.py)"
-            >
-            <select id="newScriptLanguage">
-                <option value="">-- Selecciona lenguaje --</option>
-                <option value="lua">Lua (Roblox, Love2D)</option>
-                <option value="python">Python</option>
-                <option value="javascript">JavaScript</option>
-                <option value="csharp">C# (Unity)</option>
-                <option value="cpp">C++ (Unreal)</option>
-                <option value="java">Java</option>
-                <option value="other">Otro</option>
-            </select>
-            <select id="scriptTemplate">
-                <option value="">-- Plantilla --</option>
-                <option value="empty">Vacío</option>
-                <option value="hello">Hola Mundo</option>
-                <option value="function">Función Simple</option>
-                <option value="class">Clase/Objeto</option>
-            </select>
-            <div class="modal-buttons">
-                <button class="btn-primary" onclick="createNewScript()">Crear</button>
-                <button class="btn-secondary" onclick="closeNewScriptModal()">Cancelar</button>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // ========== VARIABLES GLOBALES ==========
-        let scripts = {};
-        let currentScript = null;
-        let currentLanguage = 'lua';
-
-        // ========== TEMPLATES POR LENGUAJE ==========
-        const templates = {
-            lua: {
-                hello: `-- Hola Mundo en Lua
-print("¡Hola Mundo!")`,
-                function: `local function saludar(nombre)
-    return "Hola, " .. nombre
-end
-
-print(saludar("Usuario"))`,
-                class: `local Clase = {}
-Clase.__index = Clase
-
-function Clase.new(nombre)
-    local self = setmetatable({}, Clase)
-    self.nombre = nombre
-    return self
-end
-
-function Clase:saludar()
-    return "Hola, " .. self.nombre
-end
-
-return Clase`
-            },
-            python: {
-                hello: `# Hola Mundo en Python
-print("¡Hola Mundo!")`,
-                function: `def saludar(nombre):
-    return f"Hola, {nombre}"
-
-print(saludar("Usuario"))`,
-                class: `class Persona:
-    def __init__(self, nombre):
-        self.nombre = nombre
-    
-    def saludar(self):
-        return f"Hola, {self.nombre}"
-
-p = Persona("Usuario")
-print(p.saludar())`
-            },
-            javascript: {
-                hello: `// Hola Mundo en JavaScript
-console.log("¡Hola Mundo!");`,
-                function: `function saludar(nombre) {
-    return \`Hola, \${nombre}\`;
-}
-
-console.log(saludar("Usuario"));`,
-                class: `class Persona {
-    constructor(nombre) {
-        this.nombre = nombre;
-    }
-    
-    saludar() {
-        return \`Hola, \${this.nombre}\`;
-    }
-}
-
-const p = new Persona("Usuario");
-console.log(p.saludar());`
-            },
-            csharp: {
-                hello: `// Hola Mundo en C#
-using System;
-
-class Program {
-    static void Main() {
-        Console.WriteLine("¡Hola Mundo!");
-    }
-}`,
-                function: `using System;
-
-class Program {
-    static string Saludar(string nombre) {
-        return $"Hola, {nombre}";
-    }
-    
-    static void Main() {
-        Console.WriteLine(Saludar("Usuario"));
-    }
-}`,
-                class: `using System;
-
-class Persona {
-    public string Nombre { get; set; }
-    
-    public Persona(string nombre) {
-        Nombre = nombre;
-    }
-    
-    public string Saludar() {
-        return $"Hola, {Nombre}";
-    }
-}
-
-class Program {
-    static void Main() {
-        var p = new Persona("Usuario");
-        Console.WriteLine(p.Saludar());
-    }
-}`
-            },
-            cpp: {
-                hello: `#include <iostream>
-
-int main() {
-    std::cout << "¡Hola Mundo!" << std::endl;
-    return 0;
-}`,
-                function: `#include <iostream>
-#include <string>
-
-std::string saludar(std::string nombre) {
-    return "Hola, " + nombre;
-}
-
-int main() {
-    std::cout << saludar("Usuario") << std::endl;
-    return 0;
-}`,
-                class: `#include <iostream>
-#include <string>
-
-class Persona {
-public:
-    std::string nombre;
-    
-    Persona(std::string n) : nombre(n) {}
-    
-    std::string saludar() {
-        return "Hola, " + nombre;
-    }
-};
-
-int main() {
-    Persona p("Usuario");
-    std::cout << p.saludar() << std::endl;
-    return 0;
-}`
-            },
-            java: {
-                hello: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("¡Hola Mundo!");
-    }
-}`,
-                function: `public class Main {
-    static String saludar(String nombre) {
-        return "Hola, " + nombre;
-    }
-    
-    public static void main(String[] args) {
-        System.out.println(saludar("Usuario"));
-    }
-}`,
-                class: `class Persona {
-    String nombre;
-    
-    Persona(String nombre) {
-        this.nombre = nombre;
-    }
-    
-    String saludar() {
-        return "Hola, " + nombre;
-    }
-}
-
-public class Main {
-    public static void main(String[] args) {
-        Persona p = new Persona("Usuario");
-        System.out.println(p.saludar());
-    }
-}`
-            }
-        };
-
-        // ========== INICIALIZACIÓN ==========
-        window.addEventListener('load', () => {
-            loadScripts();
-            renderLanguageSelector();
-        });
-
-        // ========== LENGUAJES ==========
-        function renderLanguageSelector() {
-            const selector = document.getElementById('languageSelector');
-            const languages = ['lua', 'python', 'javascript', 'csharp', 'cpp', 'java'];
-            
-            languages.forEach(lang => {
-                const btn = document.createElement('button');
-                btn.className = `lang-btn ${lang === currentLanguage ? 'active' : ''}`;
-                btn.textContent = lang.toUpperCase();
-                btn.onclick = () => filterByLanguage(lang);
-                selector.appendChild(btn);
-            });
-        }
-
-        function filterByLanguage(lang) {
-            currentLanguage = lang;
-            document.querySelectorAll('.lang-btn').forEach(btn => {
-                btn.classList.remove('active');
-            });
-            event.target.classList.add('active');
-            renderScriptsList();
-        }
-
-        function updateLanguage() {
-            const lang = document.getElementById('languageSelect').value;
-            currentLanguage = lang;
-        }
-
-        // ========== GESTIÓN DE SCRIPTS ==========
-        function loadScripts() {
-            const saved = localStorage.getItem('allScripts');
-            scripts = saved ? JSON.parse(saved) : {};
-            renderScriptsList();
-        }
-
-        function saveScripts() {
-            localStorage.setItem('allScripts', JSON.stringify(scripts));
-            renderScriptsList();
-        }
-
-        function renderScriptsList() {
-            const listEl = document.getElementById('scriptsList');
-            listEl.innerHTML = '';
-
-            let totalSize = 0;
-            let langCount = new Set();
-
-            Object.entries(scripts).forEach(([name, data]) => {
-                const lang = data.language || 'unknown';
-                langCount.add(lang);
-                totalSize += new Blob([data.code]).size;
-
-                const item = document.createElement('div');
-                item.className = `script-item ${currentScript === name ? 'active' : ''}`;
-                item.onclick = () => loadScript(name);
-
-                const size = (new Blob([data.code]).size / 1024).toFixed(2);
-                item.innerHTML = `
-                    <div class="script-info">
-                        <div class="script-name">${name}</div>
-                        <div class="script-lang">
-                            ${size} KB
-                            <span class="script-lang-badge">${lang.toUpperCase()}</span>
-                        </div>
-                    </div>
-                `;
-                listEl.appendChild(item);
-            });
-
-            document.getElementById('scriptCount').textContent = Object.keys(scripts).length;
-            document.getElementById('langCount').textContent = langCount.size;
-            document.getElementById('totalSize').textContent = (totalSize / 1024).toFixed(1) + 'KB';
-        }
-
-        function loadScript(name) {
-            currentScript = name;
-            const script = scripts[name];
-            document.getElementById('scriptName').value = name;
-            document.getElementById('scriptCode').value = script.code;
-            document.getElementById('languageSelect').value = script.language || 'lua';
-            currentLanguage = script.language || 'lua';
-            renderScriptsList();
-        }
-
-        function saveScript() {
-            const name = document.getElementById('scriptName').value.trim();
-            const code = document.getElementById('scriptCode').value;
-            const language = document.getElementById('languageSelect').value;
-
-            if (!name) {
-                addConsoleLog('Error: Nombre vacío', 'error');
-                return;
-            }
-
-            scripts[name] = { code, language, savedAt: new Date().toISOString() };
-            currentScript = name;
-            saveScripts();
-            addConsoleLog(`✓ Script "${name}" guardado (${language})`, 'success');
-        }
-
-        function deleteCurrentScript() {
-            if (!currentScript) {
-                addConsoleLog('Error: Sin script seleccionado', 'error');
-                return;
-            }
-
-            if (confirm(`¿Eliminar "${currentScript}"?`)) {
-                delete scripts[currentScript];
-                currentScript = null;
-                saveScripts();
-                document.getElementById('scriptName').value = '';
-                document.getElementById('scriptCode').value = '';
-                addConsoleLog('✓ Script eliminado', 'success');
-            }
-        }
-
-        // ========== MODAL ==========
-        function openNewScriptModal() {
-            document.getElementById('newScriptModal').classList.add('active');
-        }
-
-        function closeNewScriptModal() {
-            document.getElementById('newScriptModal').classList.remove('active');
-        }
-
-        function createNewScript() {
-            const name = document.getElementById('newScriptName').value.trim();
-            const language = document.getElementById('newScriptLanguage').value;
-            const templateKey = document.getElementById('scriptTemplate').value;
-
-            if (!name || !language) {
-                alert('Completa todos los campos');
-                return;
-            }
-
-            const templates_lang = templates[language] || templates.lua;
-            const code = templateKey && templates_lang[templateKey] 
-                ? templates_lang[templateKey] 
-                : '// Tu código aquí...';
-
-            scripts[name] = { code, language, savedAt: new Date().toISOString() };
-            currentScript = name;
-            saveScripts();
-            loadScript(name);
-            closeNewScriptModal();
-            addConsoleLog(`✓ Script "${name}" creado`, 'success');
-
-            document.getElementById('newScriptName').value = '';
-            document.getElementById('newScriptLanguage').value = '';
-            document.getElementById('scriptTemplate').value = '';
-        }
-
-        // ========== VALIDACIÓN ==========
-        function validateScript() {
-            const code = document.getElementById('scriptCode').value;
-            const language = document.getElementById('languageSelect').value;
-
-            if (!code.trim()) {
-                addConsoleLog('Error: Código vacío', 'error');
-                return;
-            }
-
-            // Validación básica por lenguaje
-            let isValid = true;
-            let errors = [];
-
-            if (language === 'lua') {
-                const brackets = { '(': 0, '[': 0, '{': 0 };
-                for (let char of code) {
-                    if (brackets.hasOwnProperty(char)) brackets[char]++;
-                    if (char === ')') brackets['(']--;
-                    if (char === ']') brackets['[']--;
-                    if (char === '}') brackets['{']--;
-                }
-                Object.entries(brackets).forEach(([b, count]) => {
-                    if (count !== 0) {
-                        isValid = false;
-                        errors.push(`${count > 0 ? 'Sin cerrar' : 'Sin abrir'}: ${b}`);
-                    }
-                });
-            }
-
-            const lineCount = code.split('\n').length;
-            const charCount = code.length;
-
-            if (isValid) {
-                addConsoleLog(`✓ Sintaxis válida (${lineCount} líneas, ${charCount} caracteres)`, 'success');
-            } else {
-                addConsoleLog(`✗ Errores encontrados:`, 'error');
-                errors.forEach(err => addConsoleLog(`  - ${err}`, 'error'));
-            }
-        }
-
-        function syncScripts() {
-            addConsoleLog(`🔄 ${Object.keys(scripts).length} scripts sincronizados`, 'info');
-        }
-
-        // ========== CONSOLA ==========
-        function addConsoleLog(message, type = 'log') {
-            const console = document.getElementById('console');
-            const log = document.createElement('div');
-            log.className = `console-log console-${type}`;
-            log.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-            console.appendChild(log);
-            console.scrollTop = console.scrollHeight;
-
-            while (console.children.length > 50) {
-                console.removeChild(console.firstChild);
-            }
-        }
-    </script>
+   <div class="container">
+       <!-- Panel Izquierdo: Scripts -->
+       <div class="panel">
+           <div class="header">
+               <h2>📚 Mis Scripts</h2>
+               <span class="status">✓ Listo</span>
+           </div>
+
+           <div class="scripts-list" id="scriptsList"></div>
+
+           <div class="button-group">
+               <button class="btn-primary" onclick="openNewScriptModal()">
+                   ➕ Nuevo
+               </button>
+               <button class="btn-secondary" onclick="syncScripts()">
+                   🔄 Sincronizar
+               </button>
+           </div>
+
+           <div class="stats">
+               <div class="stat">
+                   <div class="stat-value" id="scriptCount">0</div>
+                   <div class="stat-label">Scripts</div>
+               </div>
+               <div class="stat">
+                   <div class="stat-value" id="totalSize">0KB</div>
+                   <div class="stat-label">Total</div>
+               </div>
+           </div>
+
+           <div class="info-panel">
+               <h4>💡 Cómo Funciona</h4>
+               <p>1. Creas script en la app</p>
+               <p>2. Agregas parámetros JSON</p>
+               <p>3. Presionas ⚡ Ejecutar</p>
+               <p>4. Se inyecta en Roblox automático</p>
+           </div>
+       </div>
+
+       <!-- Panel Derecho: Editor -->
+       <div class="panel">
+           <div class="header">
+               <h2>✏️ Editor</h2>
+           </div>
+
+           <div class="editor-header">
+               <input 
+                   type="text" 
+                   id="scriptName" 
+                   placeholder="Nombre del script"
+                   value="nuevo_script.lua"
+               >
+               <button class="btn-success" onclick="saveScript()" style="flex: 0;">
+                   💾 Guardar
+               </button>
+           </div>
+
+           <textarea 
+               id="scriptCode" 
+               placeholder="Código Lua aquí..."
+           ></textarea>
+
+           <!-- Parámetros -->
+           <div class="editor-header" style="margin-top: 10px;">
+               <textarea 
+                   id="scriptParams" 
+                   placeholder='Parámetros JSON: { "speed": 100, "jump": 50 }'
+                   style="height: 60px; flex: 1; margin: 0;"
+               ></textarea>
+           </div>
+
+           <!-- Botones de Ejecución -->
+           <div class="button-group" style="margin-top: 10px;">
+               <button class="btn-success" onclick="executeScript()">
+                   ⚡ Ejecutar en Roblox
+               </button>
+               <button class="btn-danger" onclick="deleteCurrentScript()">
+                   🗑️ Eliminar
+               </button>
+           </div>
+
+           <!-- Consola -->
+           <div class="console" id="console">
+               <div class="console-log">📝 Esperando ejecución...</div>
+           </div>
+       </div>
+   </div>
+
+   <!-- Modal: Nuevo Script -->
+   <div class="modal" id="newScriptModal">
+       <div class="modal-content">
+           <h3>📝 Crear Nuevo Script</h3>
+           <input 
+               type="text" 
+               id="newScriptName" 
+               placeholder="Nombre (ej: velocidad.lua)"
+           >
+           <select id="scriptTemplate">
+               <option value="">-- Plantilla --</option>
+               <option value="speed">Velocidad</option>
+               <option value="jump">Salto</option>
+               <option value="fly">Volar</option>
+               <option value="invisible">Invisible</option>
+               <option value="empty">Vacío</option>
+           </select>
+           <div class="modal-buttons">
+               <button class="btn-primary" onclick="createNewScript()">Crear</button>
+               <button class="btn-secondary" onclick="closeNewScriptModal()">Cancelar</button>
+           </div>
+       </div>
+   </div>
+
+   <script>
+       // ========== VARIABLES GLOBALES ==========
+       let scripts = {};
+       let currentScript = null;
+       const API_BASE = window.location.origin;
+
+       // ========== TEMPLATES ==========
+       const templates = {
+           speed: `local Players = game:GetService("Players")
+local player = Players:GetFirstChildOfClass("Player")
+
+if player and player.Character then
+   local humanoid = player.Character:FindFirstChild("Humanoid")
+   if humanoid then
+       humanoid.WalkSpeed = params.speed or 50
+       print("Velocidad: " .. (params.speed or 50))
+   end
+end`,
+           jump: `local Players = game:GetService("Players")
+local player = Players:GetFirstChildOfClass("Player")
+
+if player and player.Character then
+   local humanoid = player.Character:FindFirstChild("Humanoid")
+   if humanoid then
+       humanoid.JumpPower = params.jump or 50
+       print("Salto: " .. (params.jump or 50))
+   end
+end`,
+           fly: `local Players = game:GetService("Players")
+local player = Players:GetFirstChildOfClass("Player")
+
+if player and player.Character then
+   local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
+   if rootPart then
+       local bodyVelocity = Instance.new("BodyVelocity")
+       bodyVelocity.Parent = rootPart
+       bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+       bodyVelocity.Velocity = Vector3.new(0, 50, 0)
+       print("Volando!")
+   end
+end`,
+           invisible: `local Players = game:GetService("Players")
+local player = Players:GetFirstChildOfClass("Player")
+
+if player and player.Character then
+   for _, part in pairs(player.Character:GetDescendants()) do
+       if part:IsA("BasePart") then
+           part.Transparency = params.transparency or 0.5
+       end
+   end
+   print("Invisible!")
+end`,
+           empty: `-- Tu código aquí`
+       };
+
+       // ========== INICIALIZACIÓN ==========
+       window.addEventListener('load', () => {
+           loadScripts();
+       });
+
+       // ========== GESTIÓN DE SCRIPTS ==========
+       function loadScripts() {
+           const saved = localStorage.getItem('allScripts');
+           scripts = saved ? JSON.parse(saved) : {};
+           renderScriptsList();
+       }
+
+       function saveScripts() {
+           localStorage.setItem('allScripts', JSON.stringify(scripts));
+           renderScriptsList();
+       }
+
+       function renderScriptsList() {
+           const listEl = document.getElementById('scriptsList');
+           listEl.innerHTML = '';
+
+           let totalSize = 0;
+
+           Object.entries(scripts).forEach(([name, code]) => {
+               totalSize += new Blob([code]).size;
+
+               const item = document.createElement('div');
+               item.className = `script-item ${currentScript === name ? 'active' : ''}`;
+               item.onclick = () => loadScript(name);
+
+               const size = (new Blob([code]).size / 1024).toFixed(2);
+               item.innerHTML = `
+                   <div>
+                       <div class="script-name">${name}</div>
+                       <div class="script-size">${size} KB</div>
+                   </div>
+               `;
+               listEl.appendChild(item);
+           });
+
+           document.getElementById('scriptCount').textContent = Object.keys(scripts).length;
+           document.getElementById('totalSize').textContent = (totalSize / 1024).toFixed(1) + 'KB';
+       }
+
+       function loadScript(name) {
+           currentScript = name;
+           document.getElementById('scriptName').value = name;
+           document.getElementById('scriptCode').value = scripts[name];
+           document.getElementById('scriptParams').value = '';
+           renderScriptsList();
+       }
+
+       function saveScript() {
+           const name = document.getElementById('scriptName').value.trim();
+           const code = document.getElementById('scriptCode').value;
+
+           if (!name) {
+               addConsoleLog('Error: Nombre vacío', 'error');
+               return;
+           }
+
+           scripts[name] = code;
+           currentScript = name;
+           saveScripts();
+           addConsoleLog(`✓ Script "${name}" guardado`, 'success');
+       }
+
+       function deleteCurrentScript() {
+           if (!currentScript) {
+               addConsoleLog('Error: Sin script seleccionado', 'error');
+               return;
+           }
+
+           if (confirm(`¿Eliminar "${currentScript}"?`)) {
+               delete scripts[currentScript];
+               currentScript = null;
+               saveScripts();
+               document.getElementById('scriptName').value = '';
+               document.getElementById('scriptCode').value = '';
+               addConsoleLog('✓ Script eliminado', 'success');
+           }
+       }
+
+       // ========== MODAL ==========
+       function openNewScriptModal() {
+           document.getElementById('newScriptModal').classList.add('active');
+       }
+
+       function closeNewScriptModal() {
+           document.getElementById('newScriptModal').classList.remove('active');
+       }
+
+       function createNewScript() {
+           const name = document.getElementById('newScriptName').value.trim();
+           const template = document.getElementById('scriptTemplate').value;
+
+           if (!name) {
+               alert('Ingresa un nombre');
+               return;
+           }
+
+           if (scripts[name]) {
+               alert('Ya existe');
+               return;
+           }
+
+           const code = template ? (templates[template] || templates.empty) : templates.empty;
+           scripts[name] = code;
+           currentScript = name;
+           saveScripts();
+           loadScript(name);
+           closeNewScriptModal();
+           addConsoleLog(`✓ Script "${name}" creado`, 'success');
+
+           document.getElementById('newScriptName').value = '';
+           document.getElementById('scriptTemplate').value = '';
+       }
+
+       // ========== EJECUCIÓN EN ROBLOX ==========
+       async function executeScript() {
+           const name = document.getElementById('scriptName').value;
+           const code = document.getElementById('scriptCode').value;
+           const paramsText = document.getElementById('scriptParams').value;
+
+           let parameters = {};
+           
+           // Parsear parámetros JSON
+           if (paramsText.trim()) {
+               try {
+                   parameters = JSON.parse(paramsText);
+               } catch (e) {
+                   addConsoleLog('Error: JSON inválido en parámetros', 'error');
+                   return;
+               }
+           }
+
+           addConsoleLog('⚡ Inyectando en Roblox...', 'warn');
+
+           try {
+               const response = await fetch(API_BASE + '/api/execute-remote', {
+                   method: 'POST',
+                   headers: { 'Content-Type': 'application/json' },
+                   body: JSON.stringify({ 
+                       scriptName: name, 
+                       code: code,
+                       parameters: parameters
+                   })
+               });
+
+               const result = await response.json();
+
+               if (result.success) {
+                   addConsoleLog(`✓ Inyectado (ID: ${result.executionId})`, 'success');
+                   addConsoleLog(`Esperando resultado...`, 'info');
+                   
+                   // Esperar resultado cada 2 segundos
+                   let attempts = 0;
+                   const checkStatus = setInterval(async () => {
+                       attempts++;
+                       try {
+                           const statusRes = await fetch(API_BASE + `/api/execution/${result.executionId}/status`);
+                           const status = await statusRes.json();
+                           
+                           if (status.execution.status === 'completed') {
+                               clearInterval(checkStatus);
+                               if (status.execution.result.success) {
+                                   addConsoleLog(`✓ Ejecutado: ${status.execution.result.output}`, 'success');
+                               } else {
+                                   addConsoleLog(`✗ Error: ${status.execution.result.error}`, 'error');
+                               }
+                           }
+                       } catch (e) {
+                           if (attempts > 15) clearInterval(checkStatus);
+                       }
+                   }, 2000);
+               } else {
+                   addConsoleLog(`✗ ${result.error}`, 'error');
+               }
+           } catch (error) {
+               addConsoleLog('Error de conexión al servidor', 'error');
+           }
+       }
+
+       function syncScripts() {
+           addConsoleLog(`🔄 ${Object.keys(scripts).length} scripts sincronizados`, 'info');
+       }
+
+       // ========== CONSOLA ==========
+       function addConsoleLog(message, type = 'log') {
+           const console = document.getElementById('console');
+           const log = document.createElement('div');
+           log.className = `console-log console-${type}`;
+           log.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+           console.appendChild(log);
+           console.scrollTop = console.scrollHeight;
+
+           while (console.children.length > 50) {
+               console.removeChild(console.firstChild);
+           }
+       }
+   </script>
 </body>
 </html>
