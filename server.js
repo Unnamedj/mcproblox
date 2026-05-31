@@ -1,189 +1,208 @@
 const express = require('express');
-const axios = require('axios');
-const fs = require('fs');
-const { HttpsProxyAgent } = require('https-proxy-agent');
+const cors = require('cors');
+const fs = require('fs-extra');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname, 'public')));
 
-let proxies = [];
-let proxyIndex = 0;
+const SCRIPTS_DIR = '/tmp/roblox-scripts';
+const CONFIG_FILE = '/tmp/server-config.json';
 
-function loadProxies() {
-  try {
-    const raw = fs.readFileSync('proxies.txt', 'utf8');
-    proxies = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith('#'));
-    console.log('Loaded ' + proxies.length + ' proxies from proxies.txt');
-  } catch (e) {
-    if (process.env.PROXIES) {
-      proxies = process.env.PROXIES.split(',').map(p => p.trim()).filter(Boolean);
-      console.log('Loaded ' + proxies.length + ' proxies from env');
-    } else {
-      console.log('No proxies loaded - running direct');
+let config = {
+    scripts: {},
+    executionHistory: [],
+    pendingExecutions: {},
+    lastUpdated: new Date().toISOString()
+};
+
+async function initialize() {
+    try {
+        await fs.ensureDir(SCRIPTS_DIR);
+        if (await fs.pathExists(CONFIG_FILE)) {
+            config = await fs.readJson(CONFIG_FILE);
+        } else {
+            await fs.writeJson(CONFIG_FILE, config);
+        }
+        console.log('✓ Servidor inicializado');
+    } catch (error) {
+        console.error('Error:', error);
     }
-  }
 }
 
-function parseProxy(str) {
-  if (!str) return null;
-  const s = str.trim();
-  if (s.includes('@')) {
-    const at = s.lastIndexOf('@');
-    const left = s.slice(0, at);
-    const right = s.slice(at + 1);
-    const parts = right.split(':');
-    if (parts.length < 2) return null;
-    const host = parts[0];
-    const port = parseInt(parts[1]);
-    const colon = left.indexOf(':');
-    if (colon === -1) return { host, port, username: null, password: null };
-    return { host, port, username: left.slice(0, colon), password: left.slice(colon + 1) };
-  }
-  const parts = s.split(':');
-  if (parts.length === 4) {
-    const secondIsPort = !isNaN(parseInt(parts[1])) && parts[1].length <= 5;
-    if (secondIsPort) return { host: parts[0], port: parseInt(parts[1]), username: parts[2], password: parts[3] };
-    return { host: parts[2], port: parseInt(parts[3]), username: parts[0], password: parts[1] };
-  }
-  if (parts.length === 2) return { host: parts[0], port: parseInt(parts[1]), username: null, password: null };
-  return null;
-}
-
-function getProxyAgent() {
-  if (proxies.length === 0) return undefined;
-  const raw = proxies[proxyIndex % proxies.length];
-  proxyIndex++;
-  const p = parseProxy(raw);
-  if (!p) return undefined;
-  const auth = p.username && p.password ? p.username + ':' + p.password + '@' : '';
-  return new HttpsProxyAgent('http://' + auth + p.host + ':' + p.port);
-}
-
-const rateLimits = {};
-function isRL(platform) {
-  if (!rateLimits[platform]) return false;
-  if (Date.now() > rateLimits[platform]) { delete rateLimits[platform]; return false; }
-  return true;
-}
-function setRL(platform, ms) {
-  rateLimits[platform] = Date.now() + ms;
-  console.log('Rate limited [' + platform + '] cooldown ' + (ms / 1000) + 's');
-}
-
-const TIMEOUT = 12000;
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36';
-
-async function checkRoblox(name) {
-  if (isRL('roblox')) return { rateLimited: true };
-  try {
-    const r = await axios.get(
-      'https://auth.roblox.com/v1/usernames/validate?Username=' + encodeURIComponent(name) + '&Birthday=2000-01-01',
-      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': UA } }
-    );
-    return { available: r.data.code === 0 };
-  } catch (e) {
-    if (e.response && e.response.status === 429) { setRL('roblox', 90000); return { rateLimited: true }; }
-    return { available: false, error: e.code || e.message };
-  }
-}
-
-async function checkDiscord(name) {
-  if (isRL('discord')) return { rateLimited: true };
-  try {
-    const r = await axios.post(
-      'https://discord.com/api/v9/auth/verify-username',
-      { username: name },
-      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'Content-Type': 'application/json', 'User-Agent': UA } }
-    );
-    return { available: r.data.taken === false };
-  } catch (e) {
-    if (e.response && e.response.status === 429) { setRL('discord', 120000); return { rateLimited: true }; }
-    return { available: false, error: e.code || e.message };
-  }
-}
-
-async function checkTikTok(name) {
-  if (isRL('tiktok')) return { rateLimited: true };
-  try {
-    const r = await axios.get(
-      'https://www.tiktok.com/api/user/detail/?uniqueId=' + encodeURIComponent(name) + '&aid=1988',
-      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': UA, 'Referer': 'https://www.tiktok.com/' } }
-    );
-    return { available: !r.data.userInfo || !r.data.userInfo.user || !r.data.userInfo.user.id };
-  } catch (e) {
-    if (e.response && e.response.status === 429) { setRL('tiktok', 180000); return { rateLimited: true }; }
-    if (e.response && e.response.status === 404) return { available: true };
-    return { available: false, error: e.code || e.message };
-  }
-}
-
-async function checkInstagram(name) {
-  if (isRL('instagram')) return { rateLimited: true };
-  try {
-    const r = await axios.get(
-      'https://www.instagram.com/api/v1/users/web_profile_info/?username=' + encodeURIComponent(name),
-      { httpsAgent: getProxyAgent(), proxy: false, timeout: TIMEOUT, headers: { 'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)', 'X-IG-App-ID': '936619743392459', 'Referer': 'https://www.instagram.com/' } }
-    );
-    return { available: !r.data.data || !r.data.data.user };
-  } catch (e) {
-    if (e.response && e.response.status === 429) { setRL('instagram', 300000); return { rateLimited: true }; }
-    if (e.response && e.response.status === 404) return { available: true };
-    return { available: false, error: e.code || e.message };
-  }
-}
-
-const checkers = { roblox: checkRoblox, discord: checkDiscord, tiktok: checkTikTok, instagram: checkInstagram };
-
-app.get('/check/:platform/:name', async (req, res) => {
-  const platform = req.params.platform;
-  const name = req.params.name;
-  if (!checkers[platform]) return res.status(400).json({ error: 'Unknown platform' });
-  const result = await checkers[platform](name);
-  console.log('[' + platform + '] @' + name + ' ->', JSON.stringify(result));
-  res.json(result);
-});
-
-app.post('/check-bulk', async (req, res) => {
-  const names = req.body.names || [];
-  const platforms = req.body.platforms || [];
-  if (names.length > 100) return res.status(400).json({ error: 'Max 100 names' });
-  const results = {};
-  for (const name of names) {
-    results[name] = {};
-    for (const p of platforms) {
-      if (checkers[p]) results[name][p] = await checkers[p](name);
+function validateLua(code) {
+    const errors = [];
+    const brackets = { '(': 0, '[': 0, '{': 0 };
+    const closing = { ')': '(', ']': '[', '}': '{' };
+    for (let i = 0; i < code.length; i++) {
+        const char = code[i];
+        if (brackets.hasOwnProperty(char)) brackets[char]++;
+        else if (closing.hasOwnProperty(char)) brackets[closing[char]]--;
     }
-  }
-  res.json(results);
+    Object.entries(brackets).forEach(([bracket, count]) => {
+        if (count > 0) errors.push(`${count} '${bracket}' sin cerrar`);
+        if (count < 0) errors.push(`'${bracket}' cerrado sin abrir`);
+    });
+    return { isValid: errors.length === 0, errors };
+}
+
+// RUTAS BÁSICAS
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', version: '3.0.0' });
 });
 
-app.get('/reload-proxies', (req, res) => {
-  loadProxies();
-  res.json({ ok: true, proxies: proxies.length });
+app.get('/api/scripts', async (req, res) => {
+    try {
+        const scripts = {};
+        const files = await fs.readdir(SCRIPTS_DIR);
+        for (const file of files) {
+            if (file.endsWith('.lua')) {
+                const name = file.replace('.lua', '');
+                scripts[name] = await fs.readFile(path.join(SCRIPTS_DIR, file), 'utf-8');
+            }
+        }
+        res.json({ success: true, scripts });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
-app.get('/ping', (req, res) => {
-  res.json({ ok: true, proxies: proxies.length, rateLimits: rateLimits, uptime: Math.floor(process.uptime()) + 's' });
+app.post('/api/scripts', async (req, res) => {
+    const { scripts: uploadedScripts } = req.body;
+    try {
+        let saved = 0;
+        for (const [name, code] of Object.entries(uploadedScripts || {})) {
+            const filePath = path.join(SCRIPTS_DIR, `${name}.lua`);
+            await fs.writeFile(filePath, code, 'utf-8');
+            config.scripts[name] = { savedAt: new Date().toISOString() };
+            saved++;
+        }
+        config.lastUpdated = new Date().toISOString();
+        await fs.writeJson(CONFIG_FILE, config);
+        res.json({ success: true, saved });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
-app.get('/stats', (req, res) => {
-  res.json({ proxies: proxies.length, rateLimits: rateLimits, uptime: Math.floor(process.uptime()) + 's' });
+app.post('/api/validate', (req, res) => {
+    const { code } = req.body;
+    if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
+    const validation = validateLua(code);
+    res.json({ success: true, isValid: validation.isValid, errors: validation.errors });
+});
+
+app.get('/api/scripts/:name', async (req, res) => {
+    try {
+        const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
+        if (!await fs.pathExists(filePath)) {
+            return res.status(404).json({ success: false, error: 'No encontrado' });
+        }
+        const code = await fs.readFile(filePath, 'utf-8');
+        res.json({ success: true, code });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.delete('/api/scripts/:name', async (req, res) => {
+    try {
+        const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
+        if (await fs.pathExists(filePath)) {
+            await fs.remove(filePath);
+            delete config.scripts[req.params.name];
+            await fs.writeJson(CONFIG_FILE, config);
+            res.json({ success: true });
+        } else {
+            res.status(404).json({ success: false, error: 'No encontrado' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// INYECCIÓN REMOTA
+app.post('/api/execute-remote', async (req, res) => {
+    const { scriptName, code, parameters } = req.body;
+    if (!scriptName || !code) {
+        return res.status(400).json({ success: false, error: 'Falta código o nombre' });
+    }
+    try {
+        const validation = validateLua(code);
+        if (!validation.isValid) {
+            return res.json({ success: false, error: `Errores: ${validation.errors.join(', ')}` });
+        }
+        const executionId = uuidv4();
+        config.pendingExecutions[executionId] = {
+            id: executionId,
+            name: scriptName,
+            code: code,
+            parameters: parameters || {},
+            createdAt: new Date().toISOString(),
+            status: 'pending'
+        };
+        const filePath = path.join(SCRIPTS_DIR, `${scriptName}.lua`);
+        await fs.writeFile(filePath, code, 'utf-8');
+        config.scripts[scriptName] = { savedAt: new Date().toISOString() };
+        await fs.writeJson(CONFIG_FILE, config);
+        res.json({ success: true, executionId, message: 'Script pendiente' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/pending-executions', (req, res) => {
+    const pending = Object.values(config.pendingExecutions)
+        .filter(exec => exec.status === 'pending')
+        .slice(0, 5);
+    res.json({ success: true, count: pending.length, executions: pending });
+});
+
+app.post('/api/execution/:id/result', (req, res) => {
+    const { id } = req.params;
+    const { success, output, error, executionTime } = req.body;
+    try {
+        if (config.pendingExecutions[id]) {
+            config.pendingExecutions[id].status = success ? 'completed' : 'error';
+            config.pendingExecutions[id].result = { success, output, error, executionTime };
+            config.pendingExecutions[id].completedAt = new Date().toISOString();
+            config.executionHistory.push({
+                executionId: id,
+                scriptName: config.pendingExecutions[id].name,
+                timestamp: new Date().toISOString(),
+                success, output
+            });
+            if (config.executionHistory.length > 100) {
+                config.executionHistory = config.executionHistory.slice(-100);
+            }
+            fs.writeJson(CONFIG_FILE, config);
+        }
+        res.json({ success: true });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/execution/:id/status', (req, res) => {
+    const execution = config.pendingExecutions[req.params.id];
+    if (!execution) return res.status(404).json({ success: false, error: 'No encontrado' });
+    res.json({ success: true, execution });
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'Username Sniper Backend running', proxies: proxies.length });
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, function() {
-  console.log('Username Sniper Backend running on port ' + PORT);
-  loadProxies();
-});
+async function start() {
+    await initialize();
+    app.listen(PORT, () => {
+        console.log(`🚀 Servidor activo en puerto ${PORT}`);
+    });
+}
+
+start().catch(console.error);
