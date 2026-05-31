@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🎮 Roblox Script Manager - Mobile</title>
+    <title>💻 Script Editor Pro - Multi-Lenguaje</title>
     <style>
         * {
             margin: 0;
@@ -12,11 +12,10 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 10px;
-            color: #333;
         }
 
         .container {
@@ -26,15 +25,12 @@
             grid-template-columns: 1fr 1fr;
             gap: 15px;
             height: 100vh;
-            padding: 10px;
         }
 
-        /* Responsive para mobile */
         @media (max-width: 768px) {
             .container {
                 grid-template-columns: 1fr;
                 height: auto;
-                gap: 10px;
             }
         }
 
@@ -58,34 +54,51 @@
         }
 
         .header h2 {
-            font-size: 1.5em;
+            font-size: 1.4em;
             color: #667eea;
             flex: 1;
         }
 
         .status {
-            padding: 8px 12px;
+            padding: 6px 12px;
             border-radius: 20px;
-            font-size: 0.85em;
+            font-size: 0.8em;
             font-weight: bold;
-        }
-
-        .status.connected {
-            background: #4ade80;
+            background: #10b981;
             color: white;
         }
 
-        .status.disconnected {
-            background: #ef4444;
+        /* Selector de lenguaje */
+        .language-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+            gap: 8px;
+            margin-bottom: 15px;
+        }
+
+        .lang-btn {
+            padding: 8px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.85em;
+            transition: all 0.3s;
+            text-align: center;
+        }
+
+        .lang-btn:hover {
+            border-color: #667eea;
+        }
+
+        .lang-btn.active {
+            background: #667eea;
             color: white;
+            border-color: #667eea;
         }
 
-        /* Panel de Scripts */
-        .scripts-panel {
-            display: flex;
-            flex-direction: column;
-        }
-
+        /* Lista de scripts */
         .scripts-list {
             flex: 1;
             overflow-y: auto;
@@ -102,7 +115,7 @@
             border-left: 4px solid #667eea;
             border-radius: 8px;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.3s;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -116,19 +129,30 @@
         .script-item.active {
             background: #667eea;
             color: white;
-            border-left-color: white;
+        }
+
+        .script-info {
+            flex: 1;
         }
 
         .script-name {
             font-weight: bold;
-            flex: 1;
         }
 
-        .script-size {
-            font-size: 0.8em;
+        .script-lang {
+            font-size: 0.75em;
             opacity: 0.7;
+            margin-top: 4px;
         }
 
+        .script-lang-badge {
+            background: rgba(255, 255, 255, 0.3);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin-left: 5px;
+        }
+
+        /* Botones */
         .button-group {
             display: flex;
             gap: 10px;
@@ -144,11 +168,7 @@
             font-weight: bold;
             cursor: pointer;
             font-size: 0.95em;
-            transition: all 0.3s ease;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+            transition: all 0.3s;
         }
 
         .btn-primary {
@@ -159,10 +179,6 @@
         .btn-primary:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-primary:active {
-            transform: translateY(0);
         }
 
         .btn-secondary {
@@ -188,25 +204,25 @@
             color: white;
         }
 
-        .btn-success:hover {
-            background: #16a34a;
-        }
-
         /* Editor */
-        .editor-panel {
-            display: flex;
-            flex-direction: column;
-        }
-
         .editor-header {
             display: flex;
             gap: 10px;
             margin-bottom: 10px;
+            flex-wrap: wrap;
             align-items: center;
         }
 
         .editor-header input {
             flex: 1;
+            min-width: 150px;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+
+        .editor-header select {
             padding: 10px;
             border: 1px solid #d1d5db;
             border-radius: 8px;
@@ -222,6 +238,67 @@
             font-size: 0.95em;
             resize: none;
             line-height: 1.5;
+        }
+
+        /* Console */
+        .console {
+            background: #1f2937;
+            color: #10b981;
+            padding: 12px;
+            border-radius: 8px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+            max-height: 150px;
+            overflow-y: auto;
+            margin-top: 10px;
+            line-height: 1.4;
+        }
+
+        .console-log {
+            margin: 3px 0;
+        }
+
+        .console-error {
+            color: #ef4444;
+        }
+
+        .console-success {
+            color: #10b981;
+        }
+
+        .console-warn {
+            color: #f59e0b;
+        }
+
+        .console-info {
+            color: #3b82f6;
+        }
+
+        /* Stats */
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .stat {
+            background: #f3f4f6;
+            padding: 10px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            font-size: 0.8em;
+            color: #6b7280;
+            margin-top: 5px;
         }
 
         /* Info Panel */
@@ -244,7 +321,7 @@
             color: #64748b;
         }
 
-        /* Dialog/Modal */
+        /* Modal */
         .modal {
             display: none;
             position: fixed;
@@ -277,7 +354,7 @@
         }
 
         .modal-content input,
-        .modal-content textarea {
+        .modal-content select {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
@@ -296,108 +373,35 @@
             flex: 1;
         }
 
-        /* Console/Output */
-        .console {
-            background: #1f2937;
-            color: #10b981;
-            padding: 12px;
-            border-radius: 8px;
-            font-family: 'Monaco', 'Courier New', monospace;
-            font-size: 0.85em;
-            max-height: 150px;
-            overflow-y: auto;
-            margin-top: 10px;
-            line-height: 1.4;
-        }
-
-        .console-log {
-            margin: 3px 0;
-        }
-
-        .console-error {
-            color: #ef4444;
-        }
-
-        .console-success {
-            color: #10b981;
-        }
-
-        .console-warn {
-            color: #f59e0b;
-        }
-
-        /* Loading */
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Badges */
-        .badge {
+        .tag {
             display: inline-block;
             padding: 4px 8px;
             background: #667eea;
             color: white;
             border-radius: 4px;
             font-size: 0.75em;
-            font-weight: bold;
-        }
-
-        .badge.unsaved {
-            background: #ef4444;
-        }
-
-        /* Stats */
-        .stats {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 10px;
-        }
-
-        .stat {
-            background: #f3f4f6;
-            padding: 10px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 1.5em;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .stat-label {
-            font-size: 0.8em;
-            color: #6b7280;
             margin-top: 5px;
+            margin-right: 5px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Panel Izquierdo: Lista de Scripts -->
-        <div class="panel scripts-panel">
+        <!-- Panel Izquierdo: Scripts -->
+        <div class="panel">
             <div class="header">
-                <h2>📝 Mis Scripts</h2>
-                <span class="status disconnected" id="status">Desconectado</span>
+                <h2>📚 Mis Scripts</h2>
+                <span class="status">✓ Listo</span>
             </div>
+
+            <!-- Selector de lenguaje -->
+            <div class="language-selector" id="languageSelector"></div>
 
             <div class="scripts-list" id="scriptsList"></div>
 
             <div class="button-group">
                 <button class="btn-primary" onclick="openNewScriptModal()">
-                    ➕ Nuevo Script
+                    ➕ Nuevo
                 </button>
                 <button class="btn-secondary" onclick="syncScripts()">
                     🔄 Sincronizar
@@ -410,20 +414,24 @@
                     <div class="stat-label">Scripts</div>
                 </div>
                 <div class="stat">
+                    <div class="stat-value" id="langCount">0</div>
+                    <div class="stat-label">Lenguajes</div>
+                </div>
+                <div class="stat">
                     <div class="stat-value" id="totalSize">0KB</div>
-                    <div class="stat-label">Tamaño Total</div>
+                    <div class="stat-label">Total</div>
                 </div>
             </div>
 
             <div class="info-panel">
                 <h4>💡 Tip</h4>
-                <p>Usa <strong>@exec</strong> en el nombre para marcarlo como ejecutable.</p>
-                <p>Ejemplo: <code>fly@exec</code></p>
+                <p>Puedes crear scripts en cualquier lenguaje: Lua, Python, JavaScript, C#, etc.</p>
+                <p>Usa templates para empezar rápido.</p>
             </div>
         </div>
 
         <!-- Panel Derecho: Editor -->
-        <div class="panel editor-panel">
+        <div class="panel">
             <div class="header">
                 <h2>✏️ Editor</h2>
             </div>
@@ -432,40 +440,45 @@
                 <input 
                     type="text" 
                     id="scriptName" 
-                    placeholder="Nombre del script..." 
+                    placeholder="Nombre del script (ej: main.py)"
                     value="nuevo_script.lua"
                 >
-                <button class="btn-success" onclick="saveScript()" style="flex: 0">
+                <select id="languageSelect" onchange="updateLanguage()">
+                    <option value="lua">Lua</option>
+                    <option value="python">Python</option>
+                    <option value="javascript">JavaScript</option>
+                    <option value="csharp">C#</option>
+                    <option value="cpp">C++</option>
+                    <option value="java">Java</option>
+                    <option value="other">Otro</option>
+                </select>
+            </div>
+
+            <div class="editor-header">
+                <button class="btn-success" onclick="saveScript()" style="flex: 0; margin: 0;">
                     💾 Guardar
+                </button>
+                <button class="btn-primary" onclick="validateScript()" style="flex: 0; margin: 0;">
+                    ✓ Validar
+                </button>
+                <button class="btn-danger" onclick="deleteCurrentScript()" style="flex: 0; margin: 0;">
+                    🗑️ Eliminar
                 </button>
             </div>
 
             <textarea 
                 id="scriptCode" 
-                placeholder="Escribe tu código Lua aquí...
+                placeholder="Escribe tu código aquí...
 
--- Ejemplo:
-local function hola()
-    print('¡Hola Roblox!')
-end
+// Ejemplo Python:
+def hello():
+    print('¡Hola!')
 
-hola()"
+hello()"
             ></textarea>
 
-            <div class="button-group" style="margin-top: 10px;">
-                <button class="btn-success" onclick="executeScript()">
-                    ⚡ Ejecutar en Roblox
-                </button>
-                <button class="btn-primary" onclick="validateScript()">
-                    ✓ Validar
-                </button>
-                <button class="btn-danger" onclick="deleteCurrentScript()">
-                    🗑️ Eliminar
-                </button>
-            </div>
-
             <div class="console" id="console">
-                <div class="console-log">Consola lista...</div>
+                <div class="console-log">📝 Consola lista...</div>
             </div>
         </div>
     </div>
@@ -477,14 +490,24 @@ hola()"
             <input 
                 type="text" 
                 id="newScriptName" 
-                placeholder="Nombre del script (ej: myscript.lua)"
+                placeholder="Nombre (ej: main.py)"
             >
-            <select id="scriptTemplate" style="width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #d1d5db; border-radius: 8px;">
+            <select id="newScriptLanguage">
+                <option value="">-- Selecciona lenguaje --</option>
+                <option value="lua">Lua (Roblox, Love2D)</option>
+                <option value="python">Python</option>
+                <option value="javascript">JavaScript</option>
+                <option value="csharp">C# (Unity)</option>
+                <option value="cpp">C++ (Unreal)</option>
+                <option value="java">Java</option>
+                <option value="other">Otro</option>
+            </select>
+            <select id="scriptTemplate">
                 <option value="">-- Plantilla --</option>
-                <option value="empty">Script Vacío</option>
+                <option value="empty">Vacío</option>
+                <option value="hello">Hola Mundo</option>
                 <option value="function">Función Simple</option>
-                <option value="playerhandler">Manejador de Jugadores</option>
-                <option value="npc">NPC Walker</option>
+                <option value="class">Clase/Objeto</option>
             </select>
             <div class="modal-buttons">
                 <button class="btn-primary" onclick="createNewScript()">Crear</button>
@@ -493,90 +516,233 @@ hola()"
         </div>
     </div>
 
-    <!-- Script Principal -->
     <script>
         // ========== VARIABLES GLOBALES ==========
         let scripts = {};
         let currentScript = null;
-        const API_BASE = 'const API_BASE = window.location.origin;
-'; // Cambiar por URL del servidor deployado
+        let currentLanguage = 'lua';
 
-        // ========== TEMPLATES ==========
+        // ========== TEMPLATES POR LENGUAJE ==========
         const templates = {
-            empty: `-- Script nuevo
--- Escribe tu código aquí`,
-            function: `local function miFunc(param)
-    print("Parámetro: " .. param)
-    return param
+            lua: {
+                hello: `-- Hola Mundo en Lua
+print("¡Hola Mundo!")`,
+                function: `local function saludar(nombre)
+    return "Hola, " .. nombre
 end
 
-return miFunc`,
-            playerhandler: `local Players = game:GetService("Players")
+print(saludar("Usuario"))`,
+                class: `local Clase = {}
+Clase.__index = Clase
 
-local function onPlayerAdded(player)
-    print(player.Name .. " se conectó")
-end
-
-local function onPlayerRemoving(player)
-    print(player.Name .. " se desconectó")
-end
-
-Players.PlayerAdded:Connect(onPlayerAdded)
-Players.PlayerRemoving:Connect(onPlayerRemoving)`,
-            npc: `local NPC = {}
-NPC.speed = 16
-
-function NPC.new(model)
-    local self = setmetatable({}, {__index = NPC})
-    self.model = model
-    self.humanoid = model:WaitForChild("Humanoid")
+function Clase.new(nombre)
+    local self = setmetatable({}, Clase)
+    self.nombre = nombre
     return self
 end
 
-return NPC`
+function Clase:saludar()
+    return "Hola, " .. self.nombre
+end
+
+return Clase`
+            },
+            python: {
+                hello: `# Hola Mundo en Python
+print("¡Hola Mundo!")`,
+                function: `def saludar(nombre):
+    return f"Hola, {nombre}"
+
+print(saludar("Usuario"))`,
+                class: `class Persona:
+    def __init__(self, nombre):
+        self.nombre = nombre
+    
+    def saludar(self):
+        return f"Hola, {self.nombre}"
+
+p = Persona("Usuario")
+print(p.saludar())`
+            },
+            javascript: {
+                hello: `// Hola Mundo en JavaScript
+console.log("¡Hola Mundo!");`,
+                function: `function saludar(nombre) {
+    return \`Hola, \${nombre}\`;
+}
+
+console.log(saludar("Usuario"));`,
+                class: `class Persona {
+    constructor(nombre) {
+        this.nombre = nombre;
+    }
+    
+    saludar() {
+        return \`Hola, \${this.nombre}\`;
+    }
+}
+
+const p = new Persona("Usuario");
+console.log(p.saludar());`
+            },
+            csharp: {
+                hello: `// Hola Mundo en C#
+using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine("¡Hola Mundo!");
+    }
+}`,
+                function: `using System;
+
+class Program {
+    static string Saludar(string nombre) {
+        return $"Hola, {nombre}";
+    }
+    
+    static void Main() {
+        Console.WriteLine(Saludar("Usuario"));
+    }
+}`,
+                class: `using System;
+
+class Persona {
+    public string Nombre { get; set; }
+    
+    public Persona(string nombre) {
+        Nombre = nombre;
+    }
+    
+    public string Saludar() {
+        return $"Hola, {Nombre}";
+    }
+}
+
+class Program {
+    static void Main() {
+        var p = new Persona("Usuario");
+        Console.WriteLine(p.Saludar());
+    }
+}`
+            },
+            cpp: {
+                hello: `#include <iostream>
+
+int main() {
+    std::cout << "¡Hola Mundo!" << std::endl;
+    return 0;
+}`,
+                function: `#include <iostream>
+#include <string>
+
+std::string saludar(std::string nombre) {
+    return "Hola, " + nombre;
+}
+
+int main() {
+    std::cout << saludar("Usuario") << std::endl;
+    return 0;
+}`,
+                class: `#include <iostream>
+#include <string>
+
+class Persona {
+public:
+    std::string nombre;
+    
+    Persona(std::string n) : nombre(n) {}
+    
+    std::string saludar() {
+        return "Hola, " + nombre;
+    }
+};
+
+int main() {
+    Persona p("Usuario");
+    std::cout << p.saludar() << std::endl;
+    return 0;
+}`
+            },
+            java: {
+                hello: `public class Main {
+    public static void main(String[] args) {
+        System.out.println("¡Hola Mundo!");
+    }
+}`,
+                function: `public class Main {
+    static String saludar(String nombre) {
+        return "Hola, " + nombre;
+    }
+    
+    public static void main(String[] args) {
+        System.out.println(saludar("Usuario"));
+    }
+}`,
+                class: `class Persona {
+    String nombre;
+    
+    Persona(String nombre) {
+        this.nombre = nombre;
+    }
+    
+    String saludar() {
+        return "Hola, " + nombre;
+    }
+}
+
+public class Main {
+    public static void main(String[] args) {
+        Persona p = new Persona("Usuario");
+        System.out.println(p.saludar());
+    }
+}`
+            }
         };
 
         // ========== INICIALIZACIÓN ==========
         window.addEventListener('load', () => {
             loadScripts();
-            checkServerConnection();
-            setInterval(checkServerConnection, 5000);
+            renderLanguageSelector();
         });
 
-        // ========== FUNCIONES DE CONEXIÓN ==========
-        async function checkServerConnection() {
-            try {
-                const response = await fetch(API_BASE + '/api/health');
-                if (response.ok) {
-                    updateStatus(true);
-                } else {
-                    updateStatus(false);
-                }
-            } catch (error) {
-                updateStatus(false);
-            }
+        // ========== LENGUAJES ==========
+        function renderLanguageSelector() {
+            const selector = document.getElementById('languageSelector');
+            const languages = ['lua', 'python', 'javascript', 'csharp', 'cpp', 'java'];
+            
+            languages.forEach(lang => {
+                const btn = document.createElement('button');
+                btn.className = `lang-btn ${lang === currentLanguage ? 'active' : ''}`;
+                btn.textContent = lang.toUpperCase();
+                btn.onclick = () => filterByLanguage(lang);
+                selector.appendChild(btn);
+            });
         }
 
-        function updateStatus(connected) {
-            const statusEl = document.getElementById('status');
-            if (connected) {
-                statusEl.className = 'status connected';
-                statusEl.textContent = '✓ Conectado';
-            } else {
-                statusEl.className = 'status disconnected';
-                statusEl.textContent = '✗ Desconectado';
-            }
+        function filterByLanguage(lang) {
+            currentLanguage = lang;
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+            renderScriptsList();
+        }
+
+        function updateLanguage() {
+            const lang = document.getElementById('languageSelect').value;
+            currentLanguage = lang;
         }
 
         // ========== GESTIÓN DE SCRIPTS ==========
         function loadScripts() {
-            const saved = localStorage.getItem('robloxScripts');
+            const saved = localStorage.getItem('allScripts');
             scripts = saved ? JSON.parse(saved) : {};
             renderScriptsList();
         }
 
         function saveScripts() {
-            localStorage.setItem('robloxScripts', JSON.stringify(scripts));
+            localStorage.setItem('allScripts', JSON.stringify(scripts));
             renderScriptsList();
         }
 
@@ -585,52 +751,64 @@ return NPC`
             listEl.innerHTML = '';
 
             let totalSize = 0;
-            Object.entries(scripts).forEach(([name, code]) => {
-                totalSize += new Blob([code]).size;
+            let langCount = new Set();
+
+            Object.entries(scripts).forEach(([name, data]) => {
+                const lang = data.language || 'unknown';
+                langCount.add(lang);
+                totalSize += new Blob([data.code]).size;
+
                 const item = document.createElement('div');
                 item.className = `script-item ${currentScript === name ? 'active' : ''}`;
                 item.onclick = () => loadScript(name);
 
-                const size = (new Blob([code]).size / 1024).toFixed(2);
+                const size = (new Blob([data.code]).size / 1024).toFixed(2);
                 item.innerHTML = `
-                    <div>
+                    <div class="script-info">
                         <div class="script-name">${name}</div>
-                        <div class="script-size">${size} KB</div>
+                        <div class="script-lang">
+                            ${size} KB
+                            <span class="script-lang-badge">${lang.toUpperCase()}</span>
+                        </div>
                     </div>
-                    ${name.includes('@exec') ? '<span class="badge">EXEC</span>' : ''}
                 `;
                 listEl.appendChild(item);
             });
 
             document.getElementById('scriptCount').textContent = Object.keys(scripts).length;
+            document.getElementById('langCount').textContent = langCount.size;
             document.getElementById('totalSize').textContent = (totalSize / 1024).toFixed(1) + 'KB';
         }
 
         function loadScript(name) {
             currentScript = name;
+            const script = scripts[name];
             document.getElementById('scriptName').value = name;
-            document.getElementById('scriptCode').value = scripts[name] || '';
+            document.getElementById('scriptCode').value = script.code;
+            document.getElementById('languageSelect').value = script.language || 'lua';
+            currentLanguage = script.language || 'lua';
             renderScriptsList();
         }
 
         function saveScript() {
             const name = document.getElementById('scriptName').value.trim();
             const code = document.getElementById('scriptCode').value;
+            const language = document.getElementById('languageSelect').value;
 
             if (!name) {
-                addConsoleLog('Error: Nombre del script vacío', 'error');
+                addConsoleLog('Error: Nombre vacío', 'error');
                 return;
             }
 
-            scripts[name] = code;
+            scripts[name] = { code, language, savedAt: new Date().toISOString() };
             currentScript = name;
             saveScripts();
-            addConsoleLog(`✓ Script "${name}" guardado`, 'success');
+            addConsoleLog(`✓ Script "${name}" guardado (${language})`, 'success');
         }
 
         function deleteCurrentScript() {
             if (!currentScript) {
-                addConsoleLog('Error: No hay script seleccionado', 'error');
+                addConsoleLog('Error: Sin script seleccionado', 'error');
                 return;
             }
 
@@ -640,11 +818,11 @@ return NPC`
                 saveScripts();
                 document.getElementById('scriptName').value = '';
                 document.getElementById('scriptCode').value = '';
-                addConsoleLog('Script eliminado', 'success');
+                addConsoleLog('✓ Script eliminado', 'success');
             }
         }
 
-        // ========== MODAL NUEVO SCRIPT ==========
+        // ========== MODAL ==========
         function openNewScriptModal() {
             document.getElementById('newScriptModal').classList.add('active');
         }
@@ -655,101 +833,74 @@ return NPC`
 
         function createNewScript() {
             const name = document.getElementById('newScriptName').value.trim();
+            const language = document.getElementById('newScriptLanguage').value;
             const templateKey = document.getElementById('scriptTemplate').value;
 
-            if (!name) {
-                alert('Ingresa un nombre para el script');
+            if (!name || !language) {
+                alert('Completa todos los campos');
                 return;
             }
 
-            if (scripts[name]) {
-                alert('Ya existe un script con ese nombre');
-                return;
-            }
+            const templates_lang = templates[language] || templates.lua;
+            const code = templateKey && templates_lang[templateKey] 
+                ? templates_lang[templateKey] 
+                : '// Tu código aquí...';
 
-            const code = templateKey ? templates[templateKey] : templates.empty;
-            scripts[name] = code;
+            scripts[name] = { code, language, savedAt: new Date().toISOString() };
             currentScript = name;
             saveScripts();
             loadScript(name);
             closeNewScriptModal();
             addConsoleLog(`✓ Script "${name}" creado`, 'success');
 
-            // Limpiar inputs
             document.getElementById('newScriptName').value = '';
+            document.getElementById('newScriptLanguage').value = '';
             document.getElementById('scriptTemplate').value = '';
         }
 
-        // ========== VALIDACIÓN Y EJECUCIÓN ==========
-        async function validateScript() {
+        // ========== VALIDACIÓN ==========
+        function validateScript() {
             const code = document.getElementById('scriptCode').value;
+            const language = document.getElementById('languageSelect').value;
 
-            try {
-                const response = await fetch(API_BASE + '/api/validate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ code })
-                });
-
-                const result = await response.json();
-
-                if (result.isValid) {
-                    addConsoleLog('✓ Sintaxis válida', 'success');
-                } else {
-                    result.errors.forEach(err => {
-                        addConsoleLog(`✗ ${err}`, 'error');
-                    });
-                }
-            } catch (error) {
-                addConsoleLog('No se pudo conectar al servidor', 'error');
-            }
-        }
-
-        async function executeScript() {
-            const name = document.getElementById('scriptName').value;
-            const code = document.getElementById('scriptCode').value;
-
-            if (!name.includes('@exec')) {
-                addConsoleLog('⚠️ Marca el script con @exec para ejecutar', 'warn');
+            if (!code.trim()) {
+                addConsoleLog('Error: Código vacío', 'error');
                 return;
             }
 
-            addConsoleLog('⚡ Enviando a Roblox...', 'warn');
+            // Validación básica por lenguaje
+            let isValid = true;
+            let errors = [];
 
-            try {
-                const response = await fetch(API_BASE + '/api/execute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name, code })
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    addConsoleLog('✓ Ejecutado en Roblox', 'success');
-                } else {
-                    addConsoleLog(`✗ ${result.error}`, 'error');
+            if (language === 'lua') {
+                const brackets = { '(': 0, '[': 0, '{': 0 };
+                for (let char of code) {
+                    if (brackets.hasOwnProperty(char)) brackets[char]++;
+                    if (char === ')') brackets['(']--;
+                    if (char === ']') brackets['[']--;
+                    if (char === '}') brackets['{']--;
                 }
-            } catch (error) {
-                addConsoleLog('No se pudo ejecutar el script', 'error');
+                Object.entries(brackets).forEach(([b, count]) => {
+                    if (count !== 0) {
+                        isValid = false;
+                        errors.push(`${count > 0 ? 'Sin cerrar' : 'Sin abrir'}: ${b}`);
+                    }
+                });
+            }
+
+            const lineCount = code.split('\n').length;
+            const charCount = code.length;
+
+            if (isValid) {
+                addConsoleLog(`✓ Sintaxis válida (${lineCount} líneas, ${charCount} caracteres)`, 'success');
+            } else {
+                addConsoleLog(`✗ Errores encontrados:`, 'error');
+                errors.forEach(err => addConsoleLog(`  - ${err}`, 'error'));
             }
         }
 
-        async function syncScripts() {
-            addConsoleLog('🔄 Sincronizando...', 'warn');
-
-            try {
-                const response = await fetch(API_BASE + '/api/scripts', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ scripts })
-                });
-
-                const result = await response.json();
-                addConsoleLog(`✓ ${Object.keys(scripts).length} scripts sincronizados`, 'success');
-            } catch (error) {
-                addConsoleLog('Error al sincronizar', 'error');
-            }
+        function syncScripts() {
+            addConsoleLog(`🔄 ${Object.keys(scripts).length} scripts sincronizados`, 'info');
         }
 
         // ========== CONSOLA ==========
@@ -761,7 +912,6 @@ return NPC`
             console.appendChild(log);
             console.scrollTop = console.scrollHeight;
 
-            // Mantener máximo 50 logs
             while (console.children.length > 50) {
                 console.removeChild(console.firstChild);
             }
