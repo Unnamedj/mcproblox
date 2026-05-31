@@ -498,7 +498,8 @@ hola()"
         // ========== VARIABLES GLOBALES ==========
         let scripts = {};
         let currentScript = null;
-        const API_BASE = 'http://localhost:3000'; // Cambiar por URL del servidor deployado
+        const API_BASE = 'const API_BASE = window.location.origin;
+'; // Cambiar por URL del servidor deployado
 
         // ========== TEMPLATES ==========
         const templates = {
