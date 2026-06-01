@@ -6,7 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = '4.3.1';
+const VERSION = '4.4.0';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -26,6 +26,53 @@ setInterval(() => {
         }
     });
 }, 10000);
+
+
+function formatWorldContext(scan) {
+    if (!scan || typeof scan !== 'object') return '';
+    const lines = [];
+    lines.push(`Juego: ${scan.gameName || '?'}`);
+    lines.push(`PlaceId: ${scan.placeId || '?'}`);
+    if (scan.playerCount != null) lines.push(`Jugadores en servidor: ${scan.playerCount}`);
+    if (Array.isArray(scan.workspaceChildren) && scan.workspaceChildren.length) {
+        lines.push(`Workspace (nivel 1): ${scan.workspaceChildren.slice(0, 25).join(', ')}`);
+    }
+    if (Array.isArray(scan.plots) && scan.plots.length) {
+        lines.push('Objetos plot/base detectados (usa estas rutas exactas):');
+        for (const p of scan.plots.slice(0, 45)) {
+            let line = `  - ${p.path} [${p.className || 'Instance'}]`;
+            if (p.children?.length) line += ` → hijos: ${p.children.join(', ')}`;
+            lines.push(line);
+        }
+    }
+    if (Array.isArray(scan.notable) && scan.notable.length) {
+        lines.push('Otros modelos relevantes:');
+        for (const n of scan.notable.slice(0, 20)) {
+            lines.push(`  - ${n.path} [${n.className}]`);
+        }
+    }
+    return lines.join('\n');
+}
+
+function getWorldScan(clientId) {
+    if (clientId && state.connections[clientId]?.worldScan) {
+        return state.connections[clientId].worldScan;
+    }
+    const sorted = Object.values(state.connections)
+        .filter(c => c.worldScan)
+        .sort((a, b) => (b.worldScanAt || 0) - (a.worldScanAt || 0));
+    return sorted[0]?.worldScan || null;
+}
+
+function summarizeScan(scan) {
+    if (!scan) return null;
+    return {
+        plotCount: Array.isArray(scan.plots) ? scan.plots.length : 0,
+        workspaceItems: Array.isArray(scan.workspaceChildren) ? scan.workspaceChildren.length : 0,
+        scannedAt: scan.scannedAt || null,
+        gameName: scan.gameName || null
+    };
+}
 
 function httpsPost(hostname, path, headers, body) {
     return new Promise((resolve, reject) => {
@@ -99,14 +146,17 @@ function apiErrorMessage(result, fallback) {
 
 // ── ROBLOX ─────────────────────────────────────────────
 app.post('/api/heartbeat', (req, res) => {
-    const { clientId, game, player } = req.body;
+    const { clientId, game, player, worldScan } = req.body;
     const id = clientId || uuidv4();
+    const prev = state.connections[id] || {};
     state.connections[id] = {
         id,
-        game: game || 'Unknown',
-        player: player || 'Unknown',
+        game: game || prev.game || 'Unknown',
+        player: player || prev.player || 'Unknown',
         lastSeen: Date.now(),
-        connectedAt: state.connections[id]?.connectedAt || Date.now()
+        connectedAt: prev.connectedAt || Date.now(),
+        worldScan: worldScan || prev.worldScan || null,
+        worldScanAt: worldScan ? Date.now() : (prev.worldScanAt || null)
     };
     let toExecute = null;
     if (state.pendingScript) {
@@ -147,7 +197,18 @@ app.get('/api/result/:id', (req, res) => {
 
 app.get('/api/status', (req, res) => {
     const connections = Object.values(state.connections);
-    res.json({ success: true, connections: connections.length, clients: connections });
+    res.json({
+        success: true,
+        connections: connections.length,
+        clients: connections.map(c => ({
+            id: c.id,
+            player: c.player,
+            game: c.game,
+            hasScan: Boolean(c.worldScan),
+            worldScanAt: c.worldScanAt || null,
+            scan: summarizeScan(c.worldScan)
+        }))
+    });
 });
 
 app.get('/api/config', (req, res) => {
@@ -164,18 +225,29 @@ app.get('/api/config', (req, res) => {
 
 // ── IA PROXY ────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
-    const { message, model: requestedModel } = req.body;
+    const { message, model: requestedModel, clientId } = req.body;
     const model = requestedModel || 'claude-haiku';
     if (!message) return res.status(400).json({ success: false, error: 'Sin mensaje' });
+
+    const worldScan = getWorldScan(clientId);
+    const worldContext = formatWorldContext(worldScan);
+    const maxTokens = worldContext ? 4096 : 2000;
 
     const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit.
 REGLAS:
 - SOLO código Lua, sin explicaciones
 - Sin markdown, sin backticks
-- Funciona desde contexto cliente
+- Funciona desde contexto cliente (LocalPlayer)
 - UI mobile: ScreenGui, botones 50px+ alto
 - Variables locales
-- Código 100% funcional`;
+- Código 100% funcional y COMPLETO (cierra todos los end/function; nunca cortes el código)
+- Si hay CONTEXTO DEL JUEGO, usa las rutas Workspace exactas listadas (plots, carpetas, modelos)
+- Para ESP de plots: itera los paths reales del contexto, no inventes nombres`;
+
+    let userContent = message;
+    if (worldContext) {
+        userContent = `CONTEXTO DEL JUEGO (escaneo en vivo del Workspace):\n${worldContext}\n\n---\nPEDIDO:\n${message}`;
+    }
 
     try {
         let result;
@@ -196,14 +268,14 @@ REGLAS:
                 },
                 {
                     model: model === 'claude-haiku' ? 'claude-3-5-haiku-20241022' : 'claude-sonnet-4-6',
-                    max_tokens: 2000,
+                    max_tokens: maxTokens,
                     system: systemPrompt,
-                    messages: [{ role: 'user', content: message }]
+                    messages: [{ role: 'user', content: userContent }]
                 }
             );
 
             if (result.content?.[0]?.text) {
-                return res.json({ success: true, code: stripCodeFences(result.content[0].text), model });
+                return res.json({ success: true, code: stripCodeFences(result.content[0].text), model, usedScan: Boolean(worldContext) });
             }
             return res.json({ success: false, error: apiErrorMessage(result, 'Sin respuesta Claude') });
         }
@@ -217,8 +289,8 @@ REGLAS:
             const candidates = geminiModelCandidates(model);
             const geminiBody = {
                 system_instruction: { parts: [{ text: systemPrompt }] },
-                contents: [{ role: 'user', parts: [{ text: message }] }],
-                generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
+                contents: [{ role: 'user', parts: [{ text: userContent }] }],
+                generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
             };
 
             let lastRaw = '';

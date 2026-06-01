@@ -29,6 +29,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .conn-dot{width:7px;height:7px;border-radius:50%;background:var(--muted);transition:.3s}
 .conn-badge.online .conn-dot{background:var(--accent);box-shadow:0 0 8px var(--accent);animation:pulse 2s ease-in-out infinite}
 .conn-badge.online{color:var(--accent)}
+.scan-badge{font-size:.65rem;color:var(--muted);padding:2px 10px;text-align:center;border-bottom:1px solid var(--border);background:var(--surface);display:none}
+.scan-badge.visible{display:block;color:var(--accent)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .model-bar{flex-shrink:0;padding:10px 16px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
 .model-bar-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
@@ -101,6 +103,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
   <div class="brand"><div class="brand-icon">⚡</div><div class="brand-text"><h1>RBX Executor</h1><span>Scripts Lua · Claude & Gemini</span></div></div>
   <div class="conn-badge" id="connBadge"><span class="conn-dot"></span><span id="connLabel">0 online</span></div>
 </header>
+<div class="scan-badge" id="scanBadge"></div>
 <div class="shell">
   <section class="model-bar" id="modelBar" data-provider="claude">
     <div class="model-bar-label">Modelo de IA</div>
@@ -115,11 +118,11 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
       <div class="chat-scroll" id="chatScroll">
         <div class="welcome-card" id="welcomeCard">
           <h2>¿Qué script quieres?</h2>
-          <p>Haiku y Flash gastan menos tokens. Elige proveedor arriba.</p>
+          <p>Con el loadstring activo, escaneamos plots y Workspace para scripts precisos.</p>
           <div class="prompt-chips">
             <button type="button" class="chip" data-prompt="Script de velocidad con UI mobile, botones grandes">Velocidad + UI mobile</button>
             <button type="button" class="chip" data-prompt="Script para volar con tecla F, suave y estable">Volar con tecla F</button>
-            <button type="button" class="chip" data-prompt="ESP de jugadores con nombres y distancia">ESP de jugadores</button>
+            <button type="button" class="chip" data-prompt="ESP de todos los plots detectados en el mapa, con nombre y distancia, usando las rutas del contexto del juego">ESP de jugadores</button>
           </div>
         </div>
       </div>
@@ -143,6 +146,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 <script>
 const API=window.location.origin,STORAGE_KEY='rbx-ai-model';
 const MODELS={claude:[{id:'claude-haiku',name:'Haiku',desc:'Más barato',badge:'Económico'},{id:'claude-sonnet',name:'Sonnet',desc:'Mejor calidad',badge:'Pro'}],gemini:[{id:'gemini-flash',name:'Flash',desc:'Gratis con límites',badge:'Flash'},{id:'gemini-pro',name:'Pro',desc:'Más capaz',badge:'Pro'}]};
+let activeClientId=null;
 let state={provider:'claude',modelId:'claude-haiku'},providers={claude:true,gemini:true};
 async function loadConfig(){try{const r=await fetch(API+'/api/config');const d=await r.json();if(d.providers){providers=d.providers;document.querySelectorAll('.provider-tab').forEach(t=>{const ok=providers[t.dataset.provider];t.classList.toggle('unavailable',!ok);t.disabled=!ok});if(!providers[state.provider]){const f=providers.claude?'claude':providers.gemini?'gemini':null;if(f)setProvider(f)}}}catch(_){}}
 function loadModelPref(){try{const s=localStorage.getItem(STORAGE_KEY);if(!s)return;const p=JSON.parse(s);if(p.provider&&MODELS[p.provider]){state.provider=p.provider;if(MODELS[p.provider].some(t=>t.id===p.modelId))state.modelId=p.modelId}}catch(_){}}
@@ -155,10 +159,10 @@ loadModelPref();setProvider(state.provider);loadConfig();
 document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(x=>x.classList.toggle('active',x===b));document.getElementById('viewChat').classList.toggle('active',b.dataset.view==='chat');document.getElementById('viewEditor').classList.toggle('active',b.dataset.view==='editor')}));
 function switchToEditor(){if(matchMedia('(max-width:899px)').matches)document.querySelector('.tab-btn[data-view=editor]').click()}
 document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{const i=document.getElementById('chatInput');i.value=c.dataset.prompt;i.dispatchEvent(new Event('input'));i.focus()}));
-async function pollStatus(){try{const r=await fetch(API+'/api/status');const d=await r.json();const n=d.connections||0;document.getElementById('connBadge').classList.toggle('online',n>0);document.getElementById('connLabel').textContent=n===1?'1 online':n+' online';const p=document.getElementById('clientsPanel');if(d.clients?.length)p.innerHTML=d.clients.map(c=>'<div class="client-row"><span class="live"></span><span>'+esc(c.player||'?')+' · '+esc(c.game||'?')+'</span></div>').join('');else p.innerHTML='<div class="clients-empty">Sin clientes Roblox conectados</div>'}catch(_){}}
+async function pollStatus(){try{const r=await fetch(API+'/api/status');const d=await r.json();const n=d.connections||0;document.getElementById('connBadge').classList.toggle('online',n>0);document.getElementById('connLabel').textContent=n===1?'1 online':n+' online';const sb=document.getElementById('scanBadge');if(d.clients?.length){const best=d.clients.find(c=>c.hasScan)||d.clients[0];activeClientId=best.id;const sc=best.scan;if(sc&&sc.plotCount>0){sb.textContent='🗺️ '+sc.plotCount+' plots detectados · la IA usa el mapa del juego';sb.classList.add('visible')}else if(best.hasScan){sb.textContent='🗺️ Mapa del juego enviado a la IA';sb.classList.add('visible')}else{sb.textContent='Conecta el loadstring para escanear plots';sb.classList.remove('visible')}}else{activeClientId=null;sb.classList.remove('visible')}const p=document.getElementById('clientsPanel');if(d.clients?.length)p.innerHTML=d.clients.map(c=>{const tag=c.scan&&c.scan.plotCount?' · '+c.scan.plotCount+' plots':'';return'<div class="client-row"><span class="live"></span><span>'+esc(c.player||'?')+' · '+esc(c.game||'?')+tag+'</span></div>'}).join('');else p.innerHTML='<div class="clients-empty">Sin clientes Roblox conectados</div>'}catch(_){}}
 setInterval(pollStatus,3000);pollStatus();
 function formatError(d){if(d.errorType==='quota'||/quota|exceeded/i.test(d.error||''))return d.error||'Cuota Gemini agotada. Usa Claude → Haiku o espera 1 min.';return d.error||'Sin respuesta'}
-async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else setBubble(ai,'⚠️ '+formatError(d))}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
+async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId,clientId:activeClientId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else setBubble(ai,'⚠️ '+formatError(d))}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
 document.getElementById('btnSend').addEventListener('click',sendMessage);
 document.getElementById('chatInput').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});

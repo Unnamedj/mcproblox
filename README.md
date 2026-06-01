@@ -30,6 +30,14 @@ La API gratis de Google tiene límite diario/por minuto. Opciones:
 3. Revisar uso en [Google AI Studio](https://aistudio.google.com/)
 
 
+
+### Escaneo del juego (Workspace)
+
+El `loadstring` envía cada ~12 s un mapa del Workspace (plots, carpetas, modelos).
+La IA usa esas rutas reales cuando pides cosas como *"ESP de los plots"*.
+
+En la web verás **🗺️ X plots detectados** cuando el escaneo esté activo.
+
 ## Cliente Roblox (loadstring)
 
 Archivo: `client/loadstring.lua`
