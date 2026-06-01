@@ -6,349 +6,262 @@
 <title>RBX Executor</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
 <style>
-  :root {
-    --bg: #080b10;
-    --panel: #0d1117;
-    --border: #1e2730;
-    --accent: #00ff87;
-    --accent2: #00bfff;
-    --red: #ff4757;
-    --text: #cdd6f4;
-    --muted: #6b7280;
-    --glow: 0 0 20px rgba(0,255,135,0.3);
-  }
-
-  * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    font-family: 'JetBrains Mono', monospace;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* TOP BAR */
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 14px 20px;
-    border-bottom: 1px solid var(--border);
-    background: var(--panel);
-  }
-
-  .logo {
-    font-family: 'Syne', sans-serif;
-    font-size: 1.2em;
-    font-weight: 800;
-    color: var(--accent);
-    letter-spacing: -0.5px;
-  }
-
-  .logo span { color: var(--text); }
-
-  .connections {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.8em;
-  }
-
-  .dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--muted);
-    transition: all 0.3s;
-  }
-
-  .dot.active {
-    background: var(--accent);
-    box-shadow: 0 0 8px var(--accent);
-    animation: pulse 2s infinite;
-  }
-
-  @keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.5; }
-  }
-
-  .conn-count {
-    font-weight: 700;
-    color: var(--accent);
-  }
-
-  /* MAIN LAYOUT */
-  .main {
-    display: flex;
-    flex: 1;
-    gap: 0;
-    overflow: hidden;
-  }
-
-  @media (max-width: 768px) {
-    .main { flex-direction: column; }
-    .panel-left, .panel-right { width: 100%; height: 50vh; }
-  }
-
-  /* PANELS */
-  .panel-left {
-    width: 45%;
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-  }
-
-  .panel-right {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .panel-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    font-size: 0.75em;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .panel-header .tag {
-    background: var(--accent);
-    color: var(--bg);
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-size: 0.8em;
-    font-weight: 700;
-  }
-
-  /* CHAT */
-  .chat-messages {
-    flex: 1;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .chat-messages::-webkit-scrollbar { width: 4px; }
-  .chat-messages::-webkit-scrollbar-track { background: transparent; }
-  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  .msg {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    max-width: 90%;
-  }
-
-  .msg.user { align-self: flex-end; align-items: flex-end; }
-  .msg.ai { align-self: flex-start; align-items: flex-start; }
-
-  .msg-label {
-    font-size: 0.7em;
-    color: var(--muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .msg-bubble {
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 0.85em;
-    line-height: 1.6;
-    white-space: pre-wrap;
-  }
-
-  .msg.user .msg-bubble {
-    background: rgba(0,255,135,0.1);
-    border: 1px solid rgba(0,255,135,0.2);
-    color: var(--text);
-  }
-
-  .msg.ai .msg-bubble {
-    background: var(--panel);
-    border: 1px solid var(--border);
-    color: var(--text);
-  }
-
-  .msg.ai .msg-bubble.typing::after {
-    content: '▋';
-    animation: blink 1s infinite;
-  }
-
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
-
-  /* CHAT INPUT */
-  .chat-input-area {
-    padding: 12px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 8px;
-    align-items: flex-end;
-  }
-
-  .chat-input {
-    flex: 1;
-    background: var(--panel);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85em;
-    padding: 10px 14px;
-    resize: none;
-    min-height: 42px;
-    max-height: 120px;
-    outline: none;
-    transition: border 0.2s;
-  }
-
-  .chat-input:focus { border-color: var(--accent); }
-
-  .chat-input::placeholder { color: var(--muted); }
-
-  .btn-send {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-family: 'JetBrains Mono', monospace;
-    font-weight: 700;
-    font-size: 0.85em;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-  }
-
-  .btn-send:hover { box-shadow: var(--glow); }
-  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
-
-  /* CODE EDITOR */
-  .code-area {
-    flex: 1;
-    background: var(--bg);
-    border: none;
-    color: #a6e3a1;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85em;
-    padding: 16px;
-    resize: none;
-    outline: none;
-    line-height: 1.6;
-  }
-
-  .code-area::placeholder { color: var(--muted); }
-
-  /* EXECUTE BAR */
-  .execute-bar {
-    padding: 12px 16px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    background: var(--panel);
-  }
-
-  .btn-execute {
-    background: var(--accent);
-    color: var(--bg);
-    border: none;
-    border-radius: 8px;
-    padding: 12px 24px;
-    font-family: 'Syne', sans-serif;
-    font-weight: 800;
-    font-size: 1em;
-    cursor: pointer;
-    transition: all 0.2s;
-    letter-spacing: 0.5px;
-  }
-
-  .btn-execute:hover {
-    transform: translateY(-1px);
-    box-shadow: var(--glow);
-  }
-
-  .btn-execute:active { transform: translateY(0); }
-  .btn-execute:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
-
-  .btn-clear {
-    background: transparent;
-    color: var(--muted);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px 16px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.85em;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-clear:hover { border-color: var(--red); color: var(--red); }
-
-  .status-text {
-    flex: 1;
-    font-size: 0.75em;
-    color: var(--muted);
-    text-align: right;
-  }
-
-  .status-text.ok { color: var(--accent); }
-  .status-text.error { color: var(--red); }
-
-  /* CLIENTS LIST */
-  .clients-list {
-    padding: 12px 16px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    max-height: 100px;
-    overflow-y: auto;
-    background: var(--panel);
-  }
-
-  .client-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75em;
-    color: var(--muted);
-  }
-
-  .client-dot {
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 6px var(--accent);
-    flex-shrink: 0;
-  }
-
-  /* WELCOME MSG */
-  .welcome {
-    text-align: center;
-    color: var(--muted);
-    font-size: 0.8em;
-    padding: 20px;
-    line-height: 1.8;
-  }
-
-  .welcome strong { color: var(--accent); }
+:root {
+  --bg: #080b10;
+  --panel: #0d1117;
+  --border: #1e2730;
+  --accent: #00ff87;
+  --red: #ff4757;
+  --text: #cdd6f4;
+  --muted: #6b7280;
+  --glow: 0 0 20px rgba(0,255,135,0.3);
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+.logo {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.2em;
+  font-weight: 800;
+  color: var(--accent);
+}
+.logo span { color: var(--text); }
+.connections {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8em;
+}
+.dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: all 0.3s;
+  flex-shrink: 0;
+}
+.dot.active {
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%,100% { opacity:1; } 50% { opacity:0.4; }
+}
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+@media (max-width: 768px) {
+  .main { flex-direction: column; }
+  .panel-left, .panel-right { width:100%; max-height:50vh; }
+}
+.panel-left {
+  width: 45%;
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+}
+.panel-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.72em;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel);
+}
+.tag {
+  background: var(--accent);
+  color: var(--bg);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  font-weight: 700;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-messages::-webkit-scrollbar { width: 3px; }
+.chat-messages::-webkit-scrollbar-thumb { background: var(--border); }
+.msg { display:flex; flex-direction:column; gap:4px; max-width:90%; }
+.msg.user { align-self:flex-end; align-items:flex-end; }
+.msg.ai { align-self:flex-start; align-items:flex-start; }
+.msg-label { font-size:0.68em; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; }
+.msg-bubble {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.82em;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.msg.user .msg-bubble {
+  background: rgba(0,255,135,0.08);
+  border: 1px solid rgba(0,255,135,0.2);
+}
+.msg.ai .msg-bubble {
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.typing::after { content:'▋'; animation: blink 1s infinite; }
+.chat-input-area {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  background: var(--panel);
+}
+.chat-input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.85em;
+  padding: 10px 14px;
+  resize: none;
+  min-height: 42px;
+  max-height: 120px;
+  outline: none;
+  transition: border 0.2s;
+}
+.chat-input:focus { border-color: var(--accent); }
+.chat-input::placeholder { color: var(--muted); }
+.btn-send {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 0.9em;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-send:hover { box-shadow: var(--glow); }
+.btn-send:disabled { opacity:0.4; cursor:not-allowed; }
+.code-area {
+  flex: 1;
+  background: var(--bg);
+  border: none;
+  color: #a6e3a1;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.83em;
+  padding: 16px;
+  resize: none;
+  outline: none;
+  line-height: 1.6;
+}
+.code-area::placeholder { color: var(--muted); }
+.execute-bar {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  background: var(--panel);
+}
+.btn-execute {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  padding: 13px 28px;
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 1em;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+.btn-execute:hover { transform:translateY(-1px); box-shadow:var(--glow); }
+.btn-execute:active { transform:translateY(0); }
+.btn-execute:disabled { opacity:0.4; cursor:not-allowed; transform:none; box-shadow:none; }
+.btn-clear {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 13px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.82em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-clear:hover { border-color:var(--red); color:var(--red); }
+.status-text { flex:1; font-size:0.75em; color:var(--muted); text-align:right; }
+.status-text.ok { color:var(--accent); }
+.status-text.error { color:var(--red); }
+.clients-list {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 90px;
+  overflow-y: auto;
+  background: var(--panel);
+}
+.client-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.73em;
+  color: var(--muted);
+}
+.client-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 5px var(--accent);
+  flex-shrink: 0;
+}
+.welcome {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.8em;
+  padding: 24px 16px;
+  line-height: 2;
+}
+.welcome strong { color: var(--accent); }
+.welcome em { color: var(--text); opacity: 0.7; }
 </style>
 </head>
 <body>
 
-<!-- TOP BAR -->
 <div class="topbar">
   <div class="logo">RBX<span>Executor</span></div>
   <div class="connections">
@@ -357,24 +270,20 @@
   </div>
 </div>
 
-<!-- MAIN -->
 <div class="main">
 
-  <!-- PANEL IZQUIERDO: CHAT CON IA -->
   <div class="panel-left">
     <div class="panel-header">
-      <span>Chat IA</span>
-      <span class="tag">Claude</span>
+      Chat IA <span class="tag">Claude</span>
     </div>
 
     <div class="chat-messages" id="chatMessages">
       <div class="welcome">
         <strong>Hola.</strong><br>
-        Dime qué script quieres y lo creo automáticamente.<br><br>
-        Ejemplo:<br>
-        <em>"Crea un script de velocidad con UI mobile"</em><br>
-        <em>"Haz un script para volar"</em><br>
-        <em>"Script que muestre ESP de jugadores"</em>
+        Dime qué script quieres y lo creo.<br><br>
+        <em>"Script de velocidad con UI mobile"</em><br>
+        <em>"Haz que pueda volar"</em><br>
+        <em>"ESP de jugadores"</em>
       </div>
     </div>
 
@@ -382,37 +291,31 @@
       <textarea
         class="chat-input"
         id="chatInput"
-        placeholder="Describe el script que quieres..."
+        placeholder="Describe el script..."
         rows="1"
       ></textarea>
       <button class="btn-send" id="btnSend" onclick="sendMessage()">Crear</button>
     </div>
   </div>
 
-  <!-- PANEL DERECHO: EDITOR + EXECUTE -->
   <div class="panel-right">
-    <div class="panel-header">
-      <span>Script Editor</span>
-    </div>
+    <div class="panel-header">Editor</div>
 
     <textarea
       class="code-area"
       id="codeArea"
-      placeholder="-- El script generado aparecerá aquí
--- También puedes escribir o editar directamente"
+      placeholder="-- El script generado aparece aquí
+-- También puedes escribir directamente"
     ></textarea>
 
     <div class="execute-bar">
-      <button class="btn-execute" id="btnExecute" onclick="executeScript()">
-        ⚡ EXECUTE
-      </button>
+      <button class="btn-execute" id="btnExecute" onclick="executeScript()">⚡ EXECUTE</button>
       <button class="btn-clear" onclick="clearCode()">Limpiar</button>
       <span class="status-text" id="statusText">Listo</span>
     </div>
 
-    <!-- CLIENTES CONECTADOS -->
     <div class="clients-list" id="clientsList">
-      <div class="client-item" style="color:var(--muted)">
+      <div class="client-item">
         <span>Sin conexiones activas</span>
       </div>
     </div>
@@ -422,21 +325,15 @@
 
 <script>
 const API = 'https://mcproblox-production.up.railway.app';
-const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-
 let currentExecId = null;
-let pollInterval = null;
 
-// ============================================================
-// POLLING - ESTADO CADA 3 SEGUNDOS
-// ============================================================
-
+// ── POLLING STATUS ─────────────────────────────────────
 async function pollStatus() {
   try {
     const res = await fetch(API + '/api/status');
     const data = await res.json();
-
     const count = data.connections || 0;
+
     const dot = document.getElementById('dot');
     const label = document.getElementById('connLabel');
 
@@ -450,7 +347,6 @@ async function pollStatus() {
       label.style.color = 'var(--muted)';
     }
 
-    // Lista de clientes
     const list = document.getElementById('clientsList');
     if (data.clients && data.clients.length > 0) {
       list.innerHTML = data.clients.map(c => `
@@ -460,100 +356,59 @@ async function pollStatus() {
         </div>
       `).join('');
     } else {
-      list.innerHTML = '<div class="client-item"><span style="color:var(--muted)">Sin conexiones activas</span></div>';
+      list.innerHTML = '<div class="client-item"><span>Sin conexiones activas</span></div>';
     }
-
-    // Verificar resultado si estamos esperando
-    if (currentExecId) {
-      checkResult(currentExecId);
-    }
-  } catch (e) {
-    // silencioso
-  }
+  } catch(e) {}
 }
 
 setInterval(pollStatus, 3000);
 pollStatus();
 
-// ============================================================
-// CLAUDE - GENERAR SCRIPT
-// ============================================================
-
+// ── CLAUDE ─────────────────────────────────────────────
 async function sendMessage() {
   const input = document.getElementById('chatInput');
   const msg = input.value.trim();
   if (!msg) return;
 
-  addMessage('user', msg);
+  addMsg('user', msg);
   input.value = '';
   input.style.height = 'auto';
 
   const btnSend = document.getElementById('btnSend');
   btnSend.disabled = true;
 
-  const aiMsgEl = addMessage('ai', '', true); // typing
+  const aiEl = addMsg('ai', '', true);
 
   try {
-    const res = await fetch(ANTHROPIC_API, {
+    const res = await fetch(API + '/api/ai', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': '',  // Se maneja por el servidor
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 2000,
-        system: `Eres un experto en Lua y Roblox. El usuario te pide scripts Lua para ejecutar en Roblox.
-
-REGLAS IMPORTANTES:
-- Responde SOLO con el código Lua, sin explicaciones ni markdown
-- Sin bloques de código (no uses \`\`\`)
-- El código debe ser ejecutable directamente en Roblox
-- Usa LocalScript si es algo visual/UI, Script si es servidor
-- Los scripts deben funcionar desde un exploit executor (cliente)
-- Para UI mobile, usa ScreenGui con botones grandes
-- Variables locales siempre
-- El código debe ser completo y funcional`,
-        messages: [{ role: 'user', content: msg }]
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg })
     });
 
     const data = await res.json();
 
-    if (data.content && data.content[0]) {
-      const code = data.content[0].text.trim();
-      
-      // Actualizar burbuja de IA
-      aiMsgEl.querySelector('.msg-bubble').textContent = '✓ Script creado. Revísalo en el editor.';
-      aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
-      
-      // Poner en editor
-      document.getElementById('codeArea').value = code;
-      setStatus('Script listo. Presiona EXECUTE para ejecutar.', '');
+    if (data.success && data.code) {
+      aiEl.querySelector('.msg-bubble').textContent = '✓ Script creado. Revísalo y presiona EXECUTE.';
+      aiEl.querySelector('.msg-bubble').classList.remove('typing');
+      document.getElementById('codeArea').value = data.code;
+      setStatus('Script listo.', '');
     } else {
-      aiMsgEl.querySelector('.msg-bubble').textContent = 'Error al generar script.';
-      aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
+      aiEl.querySelector('.msg-bubble').textContent = 'Error: ' + (data.error || 'Sin respuesta');
+      aiEl.querySelector('.msg-bubble').classList.remove('typing');
     }
-  } catch (e) {
-    aiMsgEl.querySelector('.msg-bubble').textContent = 'Error de conexión con la IA.';
-    aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
+  } catch(e) {
+    aiEl.querySelector('.msg-bubble').textContent = 'Error de conexión.';
+    aiEl.querySelector('.msg-bubble').classList.remove('typing');
   }
 
   btnSend.disabled = false;
 }
 
-// ============================================================
-// EXECUTE - ENVIAR SCRIPT A ROBLOX
-// ============================================================
-
+// ── EXECUTE ────────────────────────────────────────────
 async function executeScript() {
   const code = document.getElementById('codeArea').value.trim();
-  if (!code) {
-    setStatus('No hay código para ejecutar.', 'error');
-    return;
-  }
+  if (!code) { setStatus('No hay código.', 'error'); return; }
 
   const btn = document.getElementById('btnExecute');
   btn.disabled = true;
@@ -571,68 +426,57 @@ async function executeScript() {
     if (data.success) {
       currentExecId = data.executionId;
       setStatus('Esperando resultado...', '');
-      
-      // Esperar resultado hasta 15 segundos
+
       let attempts = 0;
       const check = setInterval(async () => {
         attempts++;
-        const result = await checkResult(currentExecId);
-        if (result || attempts > 15) {
+        try {
+          const r = await fetch(API + '/api/result/' + currentExecId);
+          const d = await r.json();
+          if (d.success && d.result) {
+            clearInterval(check);
+            btn.disabled = false;
+            currentExecId = null;
+            if (d.result.success) {
+              setStatus('✓ Ejecutado en Roblox', 'ok');
+              addMsg('ai', '✓ Ejecutado correctamente.\n' + (d.result.output || ''));
+            } else {
+              setStatus('✗ Error en Roblox', 'error');
+              addMsg('ai', '✗ Error: ' + (d.result.error || 'desconocido'));
+            }
+          }
+        } catch(e) {}
+        if (attempts >= 15) {
           clearInterval(check);
           btn.disabled = false;
-          if (!result) setStatus('Timeout. ¿Está conectado Roblox?', 'error');
+          setStatus('Timeout. ¿Está el loadstring activo?', 'error');
         }
       }, 1000);
     } else {
       setStatus('Error: ' + data.error, 'error');
       btn.disabled = false;
     }
-  } catch (e) {
+  } catch(e) {
     setStatus('Error de conexión.', 'error');
     btn.disabled = false;
   }
 }
 
-async function checkResult(execId) {
-  try {
-    const res = await fetch(API + '/api/result/' + execId);
-    const data = await res.json();
-
-    if (data.success && data.result) {
-      currentExecId = null;
-      if (data.result.success) {
-        setStatus('✓ Ejecutado en Roblox', 'ok');
-        addMessage('ai', '✓ Script ejecutado correctamente en Roblox.\nOutput: ' + (data.result.output || 'completado'));
-      } else {
-        setStatus('✗ Error en Roblox', 'error');
-        addMessage('ai', '✗ Error al ejecutar: ' + (data.result.error || 'desconocido'));
-      }
-      return true;
-    }
-  } catch (e) {}
-  return false;
-}
-
-// ============================================================
-// UI HELPERS
-// ============================================================
-
-function addMessage(role, text, typing = false) {
+// ── HELPERS ────────────────────────────────────────────
+function addMsg(role, text, typing = false) {
   const container = document.getElementById('chatMessages');
-  
-  // Quitar welcome si existe
   const welcome = container.querySelector('.welcome');
   if (welcome) welcome.remove();
 
-  const msg = document.createElement('div');
-  msg.className = `msg ${role}`;
-  msg.innerHTML = `
+  const el = document.createElement('div');
+  el.className = 'msg ' + role;
+  el.innerHTML = `
     <div class="msg-label">${role === 'user' ? 'Tú' : 'IA'}</div>
     <div class="msg-bubble ${typing ? 'typing' : ''}">${text}</div>
   `;
-  container.appendChild(msg);
+  container.appendChild(el);
   container.scrollTop = container.scrollHeight;
-  return msg;
+  return el;
 }
 
 function setStatus(text, type) {
@@ -646,13 +490,11 @@ function clearCode() {
   setStatus('Listo', '');
 }
 
-// Auto-resize textarea
 document.getElementById('chatInput').addEventListener('input', function() {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 120) + 'px';
 });
 
-// Enter para enviar
 document.getElementById('chatInput').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) {
     e.preventDefault();
