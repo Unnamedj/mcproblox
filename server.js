@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
-const fetch = require('node-fetch');
+const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -17,7 +17,7 @@ let state = {
     lastResult: null
 };
 
-// Limpiar conexiones inactivas cada 10s
+// Limpiar conexiones inactivas
 setInterval(() => {
     const now = Date.now();
     Object.keys(state.connections).forEach(id => {
@@ -27,12 +27,37 @@ setInterval(() => {
     });
 }, 10000);
 
-// ── ROBLOX ROUTES ──────────────────────────────────────
+// ── HTTPS helper (sin node-fetch) ──────────────────────
+function httpsPost(hostname, path, headers, body) {
+    return new Promise((resolve, reject) => {
+        const data = JSON.stringify(body);
+        const options = {
+            hostname,
+            path,
+            method: 'POST',
+            headers: {
+                ...headers,
+                'Content-Length': Buffer.byteLength(data)
+            }
+        };
+        const req = https.request(options, (res) => {
+            let raw = '';
+            res.on('data', chunk => raw += chunk);
+            res.on('end', () => {
+                try { resolve(JSON.parse(raw)); }
+                catch(e) { reject(new Error('JSON parse error: ' + raw)); }
+            });
+        });
+        req.on('error', reject);
+        req.write(data);
+        req.end();
+    });
+}
 
+// ── ROBLOX ─────────────────────────────────────────────
 app.post('/api/heartbeat', (req, res) => {
     const { clientId, game, player } = req.body;
     const id = clientId || uuidv4();
-
     state.connections[id] = {
         id,
         game: game || 'Unknown',
@@ -40,38 +65,27 @@ app.post('/api/heartbeat', (req, res) => {
         lastSeen: Date.now(),
         connectedAt: state.connections[id]?.connectedAt || Date.now()
     };
-
     let toExecute = null;
     if (state.pendingScript) {
         toExecute = state.pendingScript;
         state.pendingScript = null;
     }
-
     res.json({ success: true, clientId: id, execute: toExecute });
 });
 
 app.post('/api/result', (req, res) => {
     const { executionId, success, output, error } = req.body;
-    state.lastResult = {
-        executionId,
-        success,
-        output: output || '',
-        error: error || '',
-        timestamp: Date.now()
-    };
+    state.lastResult = { executionId, success, output: output || '', error: error || '', timestamp: Date.now() };
     res.json({ success: true });
 });
 
-// ── WEB APP ROUTES ─────────────────────────────────────
-
+// ── WEB APP ────────────────────────────────────────────
 app.post('/api/execute', (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
-
     const executionId = uuidv4();
     state.pendingScript = { id: executionId, code };
     state.lastResult = null;
-
     res.json({ success: true, executionId });
 });
 
@@ -85,65 +99,61 @@ app.get('/api/result/:id', (req, res) => {
 
 app.get('/api/status', (req, res) => {
     const connections = Object.values(state.connections);
-    res.json({
-        success: true,
-        connections: connections.length,
-        clients: connections,
-        hasPending: !!state.pendingScript,
-        lastResult: state.lastResult
-    });
+    res.json({ success: true, connections: connections.length, clients: connections });
 });
 
-// ── CLAUDE PROXY ───────────────────────────────────────
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.1.0' }));
 
+// ── CLAUDE PROXY ───────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
     const { message } = req.body;
-    if (!message) return res.status(400).json({ error: 'Sin mensaje' });
+    if (!message) return res.status(400).json({ success: false, error: 'Sin mensaje' });
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return res.status(500).json({ success: false, error: 'API key no configurada en Railway Variables' });
 
     try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
+        const data = await httpsPost(
+            'api.anthropic.com',
+            '/v1/messages',
+            {
                 'Content-Type': 'application/json',
-                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'x-api-key': apiKey,
                 'anthropic-version': '2023-06-01'
             },
-            body: JSON.stringify({
+            {
                 model: 'claude-sonnet-4-6',
                 max_tokens: 2000,
-                system: `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit executor.
+                system: `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit executor en Roblox.
 
 REGLAS ESTRICTAS:
 - Responde SOLO con código Lua puro
 - CERO explicaciones, CERO markdown, CERO backticks
-- El código debe funcionar desde el cliente (LocalScript context)
-- Para UI mobile: ScreenGui con botones grandes táctiles (mínimo 50px alto)
-- Siempre usa variables locales
+- Funciona desde contexto LocalScript (cliente)
+- Para UI mobile: ScreenGui con botones grandes táctiles (min 50px alto)
+- Variables siempre locales
 - Código 100% completo y funcional`,
                 messages: [{ role: 'user', content: message }]
-            })
-        });
-
-        const data = await response.json();
+            }
+        );
 
         if (data.content && data.content[0]) {
             res.json({ success: true, code: data.content[0].text.trim() });
         } else {
-            res.json({ success: false, error: 'Sin respuesta de IA' });
+            console.error('Anthropic error:', JSON.stringify(data));
+            res.json({ success: false, error: data.error?.message || 'Sin respuesta de IA' });
         }
-    } catch (e) {
+    } catch(e) {
+        console.error('Error Claude:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
-
-// ── START ──────────────────────────────────────────────
-
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.0.0' }));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor activo en puerto ${PORT}`);
+    console.log(`🚀 Puerto: ${PORT}`);
+    console.log(`🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? '✓ Configurada' : '✗ FALTA'}`);
 });
