@@ -33,10 +33,10 @@ La API gratis de Google tiene límite diario/por minuto. Opciones:
 
 ### Escaneo del juego (Workspace)
 
-El `loadstring` envía cada ~12 s un mapa del Workspace (plots, carpetas, modelos).
-La IA usa esas rutas reales cuando pides cosas como *"ESP de los plots"*.
+El `loadstring` escanea cada ~18 s **todo el juego**: Workspace (profundo), ReplicatedStorage, ReplicatedFirst, StarterGui, PlayerGui y tu personaje.
+La IA recibe un árbol completo con rutas reales para cualquier script (ESP plots, farms, UI, remotes, etc.).
 
-En la web verás **🗺️ X plots detectados** cuando el escaneo esté activo.
+En la web verás **🗺️ Juego escaneado: X rutas** cuando esté activo.
 
 ## Cliente Roblox (loadstring)
 

@@ -6,7 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = '4.4.0';
+const VERSION = '4.5.0';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -33,25 +33,46 @@ function formatWorldContext(scan) {
     const lines = [];
     lines.push(`Juego: ${scan.gameName || '?'}`);
     lines.push(`PlaceId: ${scan.placeId || '?'}`);
-    if (scan.playerCount != null) lines.push(`Jugadores en servidor: ${scan.playerCount}`);
-    if (Array.isArray(scan.workspaceChildren) && scan.workspaceChildren.length) {
-        lines.push(`Workspace (nivel 1): ${scan.workspaceChildren.slice(0, 25).join(', ')}`);
+    if (scan.playerCount != null) lines.push(`Jugadores (${scan.playerCount}): ${(scan.players || []).slice(0, 20).join(', ')}`);
+
+    if (scan.services && typeof scan.services === 'object') {
+        const svc = Object.entries(scan.services).map(([k, v]) => `${k}(${v})`).join(', ');
+        lines.push(`Servicios escaneados: ${svc}`);
     }
-    if (Array.isArray(scan.plots) && scan.plots.length) {
-        lines.push('Objetos plot/base detectados (usa estas rutas exactas):');
-        for (const p of scan.plots.slice(0, 45)) {
-            let line = `  - ${p.path} [${p.className || 'Instance'}]`;
-            if (p.children?.length) line += ` → hijos: ${p.children.join(', ')}`;
-            lines.push(line);
+
+    if (Array.isArray(scan.tree) && scan.tree.length) {
+        lines.push('');
+        lines.push('ÁRBOL COMPLETO DEL JUEGO (usa estas rutas exactas en el script):');
+        lines.push(...scan.tree.slice(0, 160));
+    } else {
+        if (Array.isArray(scan.workspaceChildren) && scan.workspaceChildren.length) {
+            lines.push(`Workspace: ${scan.workspaceChildren.slice(0, 30).join(', ')}`);
+        }
+        if (Array.isArray(scan.plots) && scan.plots.length) {
+            lines.push('Plots/bases:');
+            for (const p of scan.plots.slice(0, 40)) {
+                let line = `  - ${p.path} [${p.className}]`;
+                if (p.children?.length) line += ` → ${p.children.join(', ')}`;
+                lines.push(line);
+            }
         }
     }
-    if (Array.isArray(scan.notable) && scan.notable.length) {
-        lines.push('Otros modelos relevantes:');
-        for (const n of scan.notable.slice(0, 20)) {
-            lines.push(`  - ${n.path} [${n.className}]`);
+
+    if (Array.isArray(scan.paths) && scan.paths.length) {
+        lines.push('');
+        lines.push('Índice de rutas (path → clase):');
+        for (const p of scan.paths.slice(0, 80)) {
+            lines.push(`  ${p.path} [${p.className}]${p.children != null ? ` (${p.children} hijos)` : ''}`);
         }
     }
-    return lines.join('\n');
+
+    if (scan.stats?.truncated) {
+        lines.push('');
+        lines.push('(Escaneo recortado por límite; prioriza rutas listadas arriba)');
+    }
+
+    const text = lines.join('\n');
+    return text.length > 14000 ? text.slice(0, 14000) + '\n…(contexto recortado)' : text;
 }
 
 function getWorldScan(clientId) {
@@ -66,11 +87,17 @@ function getWorldScan(clientId) {
 
 function summarizeScan(scan) {
     if (!scan) return null;
+    const plotLike = (Array.isArray(scan.paths) ? scan.paths : []).filter(p =>
+        /plot|base|house|island|land|slot|farm|zone/i.test(p.path || '')
+    ).length;
     return {
-        plotCount: Array.isArray(scan.plots) ? scan.plots.length : 0,
+        plotCount: plotLike || (Array.isArray(scan.plots) ? scan.plots.length : 0),
+        nodeCount: scan.stats?.nodes || (Array.isArray(scan.paths) ? scan.paths.length : 0),
+        lineCount: scan.stats?.lines || (Array.isArray(scan.tree) ? scan.tree.length : 0),
         workspaceItems: Array.isArray(scan.workspaceChildren) ? scan.workspaceChildren.length : 0,
         scannedAt: scan.scannedAt || null,
-        gameName: scan.gameName || null
+        gameName: scan.gameName || null,
+        truncated: Boolean(scan.stats?.truncated)
     };
 }
 
@@ -231,7 +258,7 @@ app.post('/api/ai', async (req, res) => {
 
     const worldScan = getWorldScan(clientId);
     const worldContext = formatWorldContext(worldScan);
-    const maxTokens = worldContext ? 4096 : 2000;
+    const maxTokens = worldContext ? 8192 : 2000;
 
     const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit.
 REGLAS:
@@ -241,7 +268,7 @@ REGLAS:
 - UI mobile: ScreenGui, botones 50px+ alto
 - Variables locales
 - Código 100% funcional y COMPLETO (cierra todos los end/function; nunca cortes el código)
-- Si hay CONTEXTO DEL JUEGO, usa las rutas Workspace exactas listadas (plots, carpetas, modelos)
+- Si hay CONTEXTO DEL JUEGO, usa SOLO rutas que aparecen en el árbol (Workspace, ReplicatedStorage, PlayerGui, etc.)
 - Para ESP de plots: itera los paths reales del contexto, no inventes nombres`;
 
     let userContent = message;

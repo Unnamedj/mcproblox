@@ -1,11 +1,17 @@
 --[[
-  RBX Executor — Cliente Roblox v2
-  Escanea el Workspace y envía contexto a la web para scripts más precisos.
+  RBX Executor — Cliente Roblox v3
+  Escaneo COMPLETO del juego (Workspace, ReplicatedStorage, UI, etc.)
+  para que la web entienda todo el contexto al generar scripts.
 ]]
 
 local API = "https://mcproblox-production.up.railway.app"
 local HEARTBEAT_SEC = 1
-local SCAN_EVERY = 12
+local SCAN_EVERY = 18
+
+local MAX_TREE_LINES = 160
+local MAX_PATH_INDEX = 120
+local MAX_DEPTH_WS = 9
+local MAX_DEPTH_OTHER = 6
 
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
@@ -16,24 +22,17 @@ local clientId = tostring(LocalPlayer and LocalPlayer.UserId or math.random(1000
 local compile = loadstring or load
 local waitFn = task and task.wait or wait
 
-local PLOT_KEYWORDS = {
-    "plot", "plots", "base", "house", "land", "slot", "claim",
-    "farm", "island", "territory", "zone", "stand", "pad", "lot"
+local IMPORTANT_CLASSES = {
+    Folder = true, Model = true, ScreenGui = true, SurfaceGui = true,
+    BillboardGui = true, Tool = true, RemoteEvent = true, RemoteFunction = true,
+    BindableEvent = true, BindableFunction = true, ModuleScript = true,
+    Script = true, LocalScript = true, ProximityPrompt = true,
+    ClickDetector = true, Humanoid = true, NPC = true, Configuration = true,
+    Part = true, MeshPart = true, UnionOperation = true, SpawnLocation = true,
 }
-
-local function nameMatchesPlot(name)
-    local lower = string.lower(name)
-    for _, kw in ipairs(PLOT_KEYWORDS) do
-        if string.find(lower, kw, 1, true) then
-            return true
-        end
-    end
-    return false
-end
 
 local function httpRequest(method, url, body)
     local headers = { ["Content-Type"] = "application/json" }
-
     if syn and syn.request then
         local r = syn.request({ Url = url, Method = method, Headers = headers, Body = body })
         if r and r.Success ~= false and r.Body then return true, r.Body end
@@ -60,69 +59,142 @@ local function getGameName()
     return "Place_" .. tostring(game.PlaceId or 0)
 end
 
-local function scanWorld()
-    local ws = workspace
-    local result = {
+local function isImportant(inst)
+    if IMPORTANT_CLASSES[inst.ClassName] then return true end
+    if inst:IsA("ValueBase") then return true end
+    return false
+end
+
+local function shouldRecord(inst, depth)
+    if depth <= 3 then return true end
+    if isImportant(inst) then return true end
+    if inst:IsA("Folder") or inst:IsA("Model") then return true end
+    if #inst:GetChildren() > 0 and depth <= 5 then return true end
+    return false
+end
+
+local function scanFullGame()
+    local treeLines = {}
+    local paths = {}
+    local services = {}
+    local stats = { nodes = 0, truncated = false, lines = 0 }
+
+    local function addLine(depth, text)
+        if #treeLines >= MAX_TREE_LINES then
+            stats.truncated = true
+            return false
+        end
+        table.insert(treeLines, string.rep("  ", depth) .. text)
+        stats.lines = #treeLines
+        return true
+    end
+
+    local function addPath(path, inst, childCount)
+        if #paths >= MAX_PATH_INDEX then
+            stats.truncated = true
+            return
+        end
+        stats.nodes = stats.nodes + 1
+        table.insert(paths, {
+            path = path,
+            className = inst.ClassName,
+            children = childCount,
+        })
+    end
+
+    local function walk(inst, path, depth, maxDepth, serviceName)
+        if depth > maxDepth then return end
+        if #treeLines >= MAX_TREE_LINES and #paths >= MAX_PATH_INDEX then
+            stats.truncated = true
+            return
+        end
+
+        local name = inst.Name
+        local fullPath = path .. "." .. name
+        local kids = inst:GetChildren()
+        local childCount = #kids
+
+        if shouldRecord(inst, depth) then
+            local label = name .. " [" .. inst.ClassName .. "]"
+            if childCount > 0 then
+                label = label .. " (" .. childCount .. " hijos)"
+            end
+            addLine(depth, label)
+            addPath(fullPath, inst, childCount)
+        end
+
+        table.sort(kids, function(a, b)
+            return a.Name < b.Name
+        end)
+
+        for _, child in ipairs(kids) do
+            if #treeLines >= MAX_TREE_LINES and #paths >= MAX_PATH_INDEX then
+                stats.truncated = true
+                return
+            end
+            if depth >= 5 and child:IsA("BasePart") and not child:IsA("SpawnLocation") then
+                -- omitir parts genéricos profundos
+            else
+                walk(child, fullPath, depth + 1, maxDepth, serviceName)
+            end
+        end
+    end
+
+    local function scanRoot(root, label, maxDepth)
+        if not root then return end
+        local ok, err = pcall(function()
+            addLine(0, "=== " .. label .. " ===")
+            local kids = root:GetChildren()
+            services[label] = #kids
+            table.sort(kids, function(a, b) return a.Name < b.Name end)
+            for _, child in ipairs(kids) do
+                local childPath = label .. "." .. child.Name
+                local cc = #child:GetChildren()
+                addLine(1, child.Name .. " [" .. child.ClassName .. "]" .. (cc > 0 and (" (" .. cc .. " hijos)") or ""))
+                addPath(childPath, child, cc)
+                walk(child, label, 1, maxDepth, label)
+            end
+        end)
+        if not ok then
+            addLine(0, "=== " .. label .. " (error: " .. tostring(err) .. ") ===")
+        end
+    end
+
+    scanRoot(workspace, "Workspace", MAX_DEPTH_WS)
+
+    pcall(function() scanRoot(game:GetService("ReplicatedStorage"), "ReplicatedStorage", MAX_DEPTH_OTHER) end)
+    pcall(function() scanRoot(game:GetService("ReplicatedFirst"), "ReplicatedFirst", MAX_DEPTH_OTHER) end)
+    pcall(function() scanRoot(game:GetService("StarterGui"), "StarterGui", 4) end)
+    pcall(function() scanRoot(game:GetService("StarterPack"), "StarterPack", 4) end)
+
+    if LocalPlayer then
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char then
+                scanRoot(char, "Character." .. LocalPlayer.Name, 5)
+            end
+            local pg = LocalPlayer:FindFirstChild("PlayerGui")
+            if pg then scanRoot(pg, "PlayerGui", MAX_DEPTH_OTHER) end
+        end)
+    end
+
+    local playerNames = {}
+    for _, p in ipairs(Players:GetPlayers()) do
+        table.insert(playerNames, p.Name)
+    end
+
+    return {
+        version = 3,
         placeId = game.PlaceId,
         gameName = getGameName(),
         scannedAt = tick(),
-        workspaceChildren = {},
-        plots = {},
-        notable = {},
-        playerCount = #Players:GetPlayers(),
+        playerCount = #playerNames,
+        players = playerNames,
+        services = services,
+        tree = treeLines,
+        paths = paths,
+        stats = stats,
     }
-
-    for _, child in ipairs(ws:GetChildren()) do
-        table.insert(result.workspaceChildren, child.Name .. " (" .. child.ClassName .. ")")
-    end
-
-    local limit = { n = 0 }
-    local MAX = 55
-
-    local function pushEntry(list, path, inst, kids)
-        if limit.n >= MAX then return end
-        limit.n = limit.n + 1
-        local entry = { path = path, className = inst.ClassName }
-        if kids and #kids > 0 then entry.children = kids end
-        table.insert(list, entry)
-    end
-
-    local function sampleChildren(inst)
-        local kids = {}
-        for _, c in ipairs(inst:GetChildren()) do
-            if #kids >= 10 then break end
-            table.insert(kids, c.Name)
-        end
-        return kids
-    end
-
-    local function walk(inst, path, depth)
-        if depth > 5 or limit.n >= MAX then return end
-        local name = inst.Name
-        local fullPath = path .. "." .. name
-
-        if nameMatchesPlot(name) then
-            pushEntry(result.plots, fullPath, inst, sampleChildren(inst))
-        elseif (inst:IsA("Model") or inst:IsA("Folder")) and depth <= 2 and #inst:GetChildren() >= 3 then
-            pushEntry(result.notable, fullPath, inst, sampleChildren(inst))
-        end
-
-        for _, child in ipairs(inst:GetChildren()) do
-            walk(child, fullPath, depth + 1)
-        end
-    end
-
-    for _, top in ipairs(ws:GetChildren()) do
-        local topPath = "Workspace." .. top.Name
-        if nameMatchesPlot(top.Name) then
-            pushEntry(result.plots, topPath, top, sampleChildren(top))
-        end
-        for _, child in ipairs(top:GetChildren()) do
-            walk(child, topPath, 1)
-        end
-    end
-
-    return result
 end
 
 local function execCode(code)
@@ -141,18 +213,20 @@ end
 local scanCache = nil
 local lastScanAt = 0
 
-print("[RBX] Conectando + escaneo de Workspace activo")
+print("[RBX] Escaneo completo del juego activo")
 print("[RBX] Jugador: " .. (LocalPlayer and LocalPlayer.Name or "?"))
 
 while true do
     local now = tick()
     if not scanCache or (now - lastScanAt) >= SCAN_EVERY then
-        local okScan, scanned = pcall(scanWorld)
+        local okScan, scanned = pcall(scanFullGame)
         if okScan and scanned then
             scanCache = scanned
             lastScanAt = now
-            local n = scanned.plots and #scanned.plots or 0
-            print("[RBX] 🗺️ Mapa: " .. n .. " plots/objetos · " .. #(scanned.workspaceChildren or {}) .. " en Workspace")
+            local st = scanned.stats or {}
+            print("[RBX] 🗺️ Juego escaneado: " .. tostring(st.nodes or 0) .. " rutas · "
+                .. tostring(st.lines or 0) .. " líneas"
+                .. (st.truncated and " (parcial)" or " (completo)"))
         end
     end
 
