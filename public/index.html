@@ -161,12 +161,41 @@ function switchToEditor(){if(matchMedia('(max-width:899px)').matches)document.qu
 document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{const i=document.getElementById('chatInput');i.value=c.dataset.prompt;i.dispatchEvent(new Event('input'));i.focus()}));
 async function pollStatus(){try{const r=await fetch(API+'/api/status');const d=await r.json();const n=d.connections||0;document.getElementById('connBadge').classList.toggle('online',n>0);document.getElementById('connLabel').textContent=n===1?'1 online':n+' online';const sb=document.getElementById('scanBadge');if(d.clients?.length){const best=d.clients.find(c=>c.hasScan)||d.clients[0];activeClientId=best.id;const sc=best.scan;if(sc&&sc.plotCount>0){sb.textContent='🗺️ Juego escaneado: '+(sc.nodeCount||sc.plotCount||0)+' rutas · la IA ve todo el contexto';sb.classList.add('visible')}else if(best.hasScan){sb.textContent='🗺️ Mapa completo enviado a la IA';sb.classList.add('visible')}else{sb.textContent='Conecta el loadstring para escanear el juego';sb.classList.remove('visible')}}else{activeClientId=null;sb.classList.remove('visible')}const p=document.getElementById('clientsPanel');if(d.clients?.length)p.innerHTML=d.clients.map(c=>{const tag=c.scan&&c.scan.plotCount?' · '+c.scan.plotCount+' plots':'';return'<div class="client-row"><span class="live"></span><span>'+esc(c.player||'?')+' · '+esc(c.game||'?')+tag+'</span></div>'}).join('');else p.innerHTML='<div class="clients-empty">Sin clientes Roblox conectados</div>'}catch(_){}}
 setInterval(pollStatus,3000);pollStatus();
-function formatError(d){if(d.errorType==='quota'||/quota|exceeded/i.test(d.error||''))return d.error||'Cuota Gemini agotada. Usa Claude → Haiku o espera 1 min.';return d.error||'Sin respuesta'}
-async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId,clientId:activeClientId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else setBubble(ai,'⚠️ '+formatError(d))}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
+function formatError(d){if(d.errorType==='quota'||/quota|exceeded/i.test(d.error||''))return d.error||'Cuota Gemini agotada. Usa Claude → Haiku.';if(d.incomplete||d.errorType==='truncated')return d.error||'Código incompleto. Prueba Claude → Haiku.';return d.error||'Sin respuesta'}
+async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId,clientId:activeClientId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else{setBubble(ai,'⚠️ '+formatError(d));if(d.partialCode)document.getElementById('codeArea').value=d.partialCode}}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
 document.getElementById('btnSend').addEventListener('click',sendMessage);
 document.getElementById('chatInput').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
-async function executeScript(){const code=document.getElementById('codeArea').value.trim();if(!code){setStatus('Sin código','error');return}const btn=document.getElementById('btnExecute');btn.disabled=true;setStatus('Enviando…','');try{const r=await fetch(API+'/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const d=await r.json();if(!d.success){setStatus(d.error||'Error','error');btn.disabled=false;return}let n=0;const id=d.executionId,t=setInterval(async()=>{n++;try{const x=await fetch(API+'/api/result/'+id);const o=await x.json();if(o.success&&o.result){clearInterval(t);btn.disabled=false;if(o.result.success){setStatus('Ejecutado','ok');addMsg('ai','✓ '+(o.result.output||''))}else{setStatus('Error Roblox','error');addMsg('ai','✗ '+(o.result.error||''))}}}catch(_){}if(n>=20){clearInterval(t);btn.disabled=false;setStatus('Timeout','error')}},1000)}catch(_){setStatus('Sin conexión','error');btn.disabled=false}}
+async function executeScript(){
+  const code=document.getElementById('codeArea').value.trim();
+  if(!code){setStatus('Sin código','error');return}
+  if(!/\bend\b/.test(code)&&/\bfunction\b/.test(code)){setStatus('Código incompleto — genera de nuevo','error');showToast('El script está cortado');return}
+  const btn=document.getElementById('btnExecute');
+  btn.disabled=true;
+  setStatus('Enviando…','');
+  try{
+    const st=await fetch(API+'/api/status');
+    const sd=await st.json();
+    if(!(sd.connections>0)){setStatus('Sin cliente Roblox — ejecuta el loadstring','error');btn.disabled=false;showToast('Pega el loadstring en tu exploit');return}
+    const r=await fetch(API+'/api/execute',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});
+    const d=await r.json();
+    if(!d.success){setStatus((d.error||'Error').slice(0,120),'error');btn.disabled=false;return}
+    let n=0;const id=d.executionId;
+    const t=setInterval(async()=>{
+      n++;
+      try{
+        const x=await fetch(API+'/api/result/'+id);
+        const o=await x.json();
+        if(o.success&&o.result){
+          clearInterval(t);btn.disabled=false;
+          if(o.result.success){setStatus('Ejecutado en Roblox','ok');addMsg('ai','✓ '+(o.result.output||'OK'))}
+          else{const err=(o.result.error||'Error desconocido').slice(0,100);setStatus(err,'error');addMsg('ai','✗ '+err)}
+        }
+      }catch(_){}
+      if(n>=25){clearInterval(t);btn.disabled=false;setStatus('Timeout — ¿loadstring activo?','error')}
+    },1000);
+  }catch(_){setStatus('Sin conexión','error');btn.disabled=false}
+}
 document.getElementById('btnExecute').addEventListener('click',executeScript);
 document.getElementById('btnClear').addEventListener('click',()=>{document.getElementById('codeArea').value='';setStatus('Listo','')});
 function addMsg(role,text,typing){const s=document.getElementById('chatScroll'),el=document.createElement('div');el.className='msg '+role;el.innerHTML='<span class="msg-meta">'+(role==='user'?'Tú':modelLabel())+'</span><div class="msg-bubble'+(typing?' typing':'')+'">'+(typing?'':esc(text))+'</div>';s.appendChild(el);s.scrollTop=s.scrollHeight;return el}

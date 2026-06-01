@@ -6,7 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = '4.5.0';
+const VERSION = '4.5.1';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -72,7 +72,7 @@ function formatWorldContext(scan) {
     }
 
     const text = lines.join('\n');
-    return text.length > 14000 ? text.slice(0, 14000) + '\n…(contexto recortado)' : text;
+    return text.length > 5500 ? text.slice(0, 5500) + '\n…(mapa recortado para dejar espacio al código)' : text;
 }
 
 function getWorldScan(clientId) {
@@ -143,6 +143,41 @@ function stripCodeFences(text) {
 const GEMINI_FLASH_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
 const GEMINI_PRO_MODELS = ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite'];
 
+function isLuaComplete(code) {
+    if (!code || typeof code !== 'string') return false;
+    const t = code.trim();
+    if (t.length < 30) return false;
+    const badEnd = [
+        /local\s+function\s+\w+\s*$/,
+        /function\s+\w*\s*\([^)]*\)\s*$/,
+        /\bthen\s*$/,
+        /\bdo\s*$/,
+        /\brepeat\s*$/,
+        /=\s*$/,
+        /,\s*$/,
+        /\.\s*$/
+    ];
+    if (badEnd.some(re => re.test(t))) return false;
+    const fn = (t.match(/\bfunction\b/g) || []).length;
+    const ends = (t.match(/\bend\b/g) || []).length;
+    if (fn > 0 && ends < fn) return false;
+    return true;
+}
+
+function finalizeAiCode(raw, finishReason) {
+    const code = stripCodeFences(raw);
+    if (!isLuaComplete(code)) {
+        return {
+            ok: false,
+            code,
+            error: finishReason === 'MAX_TOKENS'
+                ? 'El modelo cortó el código (límite de tokens). Prueba Claude → Haiku o un script más corto.'
+                : 'El código generado está incompleto. Pulsa Crear de nuevo o usa Claude → Haiku.'
+        };
+    }
+    return { ok: true, code };
+}
+
 function geminiModelCandidates(model) {
     return model === 'gemini-pro' ? GEMINI_PRO_MODELS : GEMINI_FLASH_MODELS;
 }
@@ -208,6 +243,19 @@ app.post('/api/result', (req, res) => {
 app.post('/api/execute', (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
+    const online = Object.values(state.connections).filter(c => Date.now() - c.lastSeen < 20000);
+    if (online.length === 0) {
+        return res.status(503).json({
+            success: false,
+            error: 'No hay cliente Roblox conectado. Ejecuta el loadstring en tu exploit.'
+        });
+    }
+    if (!isLuaComplete(code)) {
+        return res.status(400).json({
+            success: false,
+            error: 'El código está incompleto (cortado). Genera de nuevo antes de ejecutar.'
+        });
+    }
     const executionId = uuidv4();
     state.pendingScript = { id: executionId, code };
     state.lastResult = null;
@@ -267,7 +315,7 @@ REGLAS:
 - Funciona desde contexto cliente (LocalPlayer)
 - UI mobile: ScreenGui, botones 50px+ alto
 - Variables locales
-- Código 100% funcional y COMPLETO (cierra todos los end/function; nunca cortes el código)
+- Código COMPLETO y ejecutable: cierra TODOS los end/function. Scripts cortos y compactos si el pedido es simple
 - Si hay CONTEXTO DEL JUEGO, usa SOLO rutas que aparecen en el árbol (Workspace, ReplicatedStorage, PlayerGui, etc.)
 - Para ESP de plots: itera los paths reales del contexto, no inventes nombres`;
 
@@ -302,7 +350,11 @@ REGLAS:
             );
 
             if (result.content?.[0]?.text) {
-                return res.json({ success: true, code: stripCodeFences(result.content[0].text), model, usedScan: Boolean(worldContext) });
+                const fin = finalizeAiCode(result.content[0].text, result.stop_reason);
+                if (!fin.ok) {
+                    return res.json({ success: false, error: fin.error, partialCode: fin.code, incomplete: true });
+                }
+                return res.json({ success: true, code: fin.code, model, usedScan: Boolean(worldContext) });
             }
             return res.json({ success: false, error: apiErrorMessage(result, 'Sin respuesta Claude') });
         }
@@ -331,9 +383,20 @@ REGLAS:
 
                 const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
                 if (part?.text) {
+                    const finish = result.candidates?.[0]?.finishReason;
+                    const fin = finalizeAiCode(part.text, finish);
+                    if (!fin.ok) {
+                        return res.json({
+                            success: false,
+                            error: fin.error,
+                            partialCode: fin.code,
+                            incomplete: true,
+                            errorType: finish === 'MAX_TOKENS' ? 'truncated' : 'incomplete'
+                        });
+                    }
                     return res.json({
                         success: true,
-                        code: stripCodeFences(part.text),
+                        code: fin.code,
                         model,
                         geminiModel
                     });
