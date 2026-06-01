@@ -6,6 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const VERSION = '4.3.0';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -17,7 +18,6 @@ let state = {
     lastResult: null
 };
 
-// Limpiar conexiones inactivas
 setInterval(() => {
     const now = Date.now();
     Object.keys(state.connections).forEach(id => {
@@ -27,7 +27,6 @@ setInterval(() => {
     });
 }, 10000);
 
-// ── HTTPS helper ───────────────────────────────────────
 function httpsPost(hostname, path, headers, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -44,14 +43,41 @@ function httpsPost(hostname, path, headers, body) {
             let raw = '';
             res.on('data', chunk => raw += chunk);
             res.on('end', () => {
-                try { resolve(JSON.parse(raw)); }
-                catch(e) { reject(new Error('JSON parse')); }
+                try {
+                    const parsed = JSON.parse(raw);
+                    parsed._httpStatus = res.statusCode;
+                    resolve(parsed);
+                } catch (e) {
+                    reject(new Error(`Respuesta inválida (${res.statusCode})`));
+                }
             });
         });
         req.on('error', reject);
         req.write(data);
         req.end();
     });
+}
+
+function stripCodeFences(text) {
+    if (!text) return '';
+    const s = text.trim();
+    const fenced = s.match(/^```(?:lua)?\s*\n?([\s\S]*?)```$/i);
+    if (fenced) return fenced[1].trim();
+    return s.replace(/^```(?:lua)?\n?/i, '').replace(/\n?```$/i, '').trim();
+}
+
+function geminiModelId(model) {
+    if (model === 'gemini-pro') return 'gemini-1.5-pro';
+    return 'gemini-2.0-flash';
+}
+
+function apiErrorMessage(result, fallback) {
+    if (result?.error?.message) return result.error.message;
+    if (Array.isArray(result?.error) && result.error[0]?.message) return result.error[0].message;
+    if (result?._httpStatus && result._httpStatus >= 400) {
+        return `${fallback} (HTTP ${result._httpStatus})`;
+    }
+    return fallback;
 }
 
 // ── ROBLOX ─────────────────────────────────────────────
@@ -75,11 +101,16 @@ app.post('/api/heartbeat', (req, res) => {
 
 app.post('/api/result', (req, res) => {
     const { executionId, success, output, error } = req.body;
-    state.lastResult = { executionId, success, output: output || '', error: error || '', timestamp: Date.now() };
+    state.lastResult = {
+        executionId,
+        success,
+        output: output || '',
+        error: error || '',
+        timestamp: Date.now()
+    };
     res.json({ success: true });
 });
 
-// ── WEB APP ────────────────────────────────────────────
 app.post('/api/execute', (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
@@ -102,9 +133,22 @@ app.get('/api/status', (req, res) => {
     res.json({ success: true, connections: connections.length, clients: connections });
 });
 
+app.get('/api/config', (req, res) => {
+    res.json({
+        success: true,
+        version: VERSION,
+        providers: {
+            claude: Boolean(process.env.ANTHROPIC_API_KEY),
+            gemini: Boolean(process.env.GEMINI_API_KEY)
+        },
+        defaultModel: 'claude-haiku'
+    });
+});
+
 // ── IA PROXY ────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
-    const { message, model } = req.body;
+    const { message, model: requestedModel } = req.body;
+    const model = requestedModel || 'claude-haiku';
     if (!message) return res.status(400).json({ success: false, error: 'Sin mensaje' });
 
     const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit.
@@ -119,10 +163,11 @@ REGLAS:
     try {
         let result;
 
-        // CLAUDE
         if (model === 'claude-haiku' || model === 'claude-sonnet') {
             const apiKey = process.env.ANTHROPIC_API_KEY;
-            if (!apiKey) return res.status(500).json({ success: false, error: 'Falta API key Anthropic' });
+            if (!apiKey) {
+                return res.status(500).json({ success: false, error: 'Falta ANTHROPIC_API_KEY en Railway' });
+            }
 
             result = await httpsPost(
                 'api.anthropic.com',
@@ -140,56 +185,63 @@ REGLAS:
                 }
             );
 
-            if (result.content && result.content[0]) {
-                res.json({ success: true, code: result.content[0].text.trim() });
-            } else {
-                res.json({ success: false, error: result.error?.message || 'Sin respuesta Claude' });
+            if (result.content?.[0]?.text) {
+                return res.json({ success: true, code: stripCodeFences(result.content[0].text), model });
             }
+            return res.json({ success: false, error: apiErrorMessage(result, 'Sin respuesta Claude') });
         }
-        // GEMINI
-        else if (model === 'gemini-flash' || model === 'gemini-pro') {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) return res.status(500).json({ success: false, error: 'Falta API key Gemini' });
 
+        if (model === 'gemini-flash' || model === 'gemini-pro') {
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) {
+                return res.status(500).json({ success: false, error: 'Falta GEMINI_API_KEY en Railway' });
+            }
+
+            const geminiModel = geminiModelId(model);
             result = await httpsPost(
                 'generativelanguage.googleapis.com',
-                `/v1beta/models/${model === 'gemini-flash' ? 'gemini-2.0-flash' : 'gemini-pro'}:generateContent?key=${apiKey}`,
+                `/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
                 { 'Content-Type': 'application/json' },
                 {
-                    system_instruction: { parts: { text: systemPrompt } },
-                    contents: [{
-                        parts: [{ text: message }]
-                    }],
-                    generationConfig: {
-                        maxOutputTokens: 2000,
-                        temperature: 0.7
-                    }
+                    system_instruction: { parts: [{ text: systemPrompt }] },
+                    contents: [{ role: 'user', parts: [{ text: message }] }],
+                    generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
                 }
             );
 
-            if (result.candidates && result.candidates[0]?.content?.parts[0]) {
-                res.json({ success: true, code: result.candidates[0].content.parts[0].text.trim() });
-            } else {
-                res.json({ success: false, error: result.error?.message || 'Sin respuesta Gemini' });
+            const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
+            if (part?.text) {
+                return res.json({ success: true, code: stripCodeFences(part.text), model });
             }
+
+            const finish = result.candidates?.[0]?.finishReason;
+            const suffix = finish && finish !== 'STOP' ? ` (${finish})` : '';
+            return res.json({
+                success: false,
+                error: apiErrorMessage(result, 'Sin respuesta Gemini') + suffix
+            });
         }
-        else {
-            res.status(400).json({ success: false, error: 'Modelo desconocido' });
-        }
-    } catch(e) {
+
+        return res.status(400).json({ success: false, error: 'Modelo desconocido' });
+    } catch (e) {
         console.error('Error IA:', e.message);
-        res.status(500).json({ success: false, error: e.message });
+        return res.status(500).json({ success: false, error: e.message });
     }
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.2.0' }));
+app.get('/api/health', (req, res) => res.json({
+    status: 'ok',
+    version: VERSION,
+    claude: Boolean(process.env.ANTHROPIC_API_KEY),
+    gemini: Boolean(process.env.GEMINI_API_KEY)
+}));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
-    console.log(`🚀 Puerto: ${PORT}`);
+    console.log(`🚀 RBX Executor v${VERSION} — puerto ${PORT}`);
     console.log(`🔑 Claude: ${process.env.ANTHROPIC_API_KEY ? '✓' : '✗'}`);
     console.log(`🔑 Gemini: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
 });
