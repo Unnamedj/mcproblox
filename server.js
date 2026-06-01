@@ -161,6 +161,7 @@ function isLuaComplete(code) {
     const fn = (t.match(/\bfunction\b/g) || []).length;
     const ends = (t.match(/\bend\b/g) || []).length;
     if (fn > 0 && ends < fn) return false;
+    if (/PlayerGui\.ScreenGui\b/.test(t) && !/Instance\.new\s*\(\s*["']ScreenGui["']\s*\)/.test(t)) return false;
     return true;
 }
 
@@ -497,16 +498,19 @@ app.post('/api/ai', async (req, res) => {
     const worldContext = formatWorldContext(worldScan);
     const maxTokens = worldContext ? 8192 : 2000;
 
-    const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit.
-REGLAS:
-- SOLO código Lua, sin explicaciones
-- Sin markdown, sin backticks
-- Funciona desde contexto cliente (LocalPlayer)
-- UI mobile: ScreenGui, botones 50px+ alto
-- Variables locales
-- Código COMPLETO y ejecutable: cierra TODOS los end/function. Scripts cortos y compactos si el pedido es simple
-- Si hay CONTEXTO DEL JUEGO, usa SOLO rutas que aparecen en el árbol (Workspace, ReplicatedStorage, PlayerGui, etc.)
-- Para ESP de plots: itera los paths reales del contexto, no inventes nombres`;
+    const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua ejecutables desde exploit.
+REGLAS CRÍTICAS:
+- SOLO código Lua, sin explicaciones, sin markdown, sin backticks
+- Contexto: LocalPlayer existe, pero NO asumas rutas específicas
+- NUNCA uses PlayerGui.ScreenGui directo. Crea con: local sg = Instance.new("ScreenGui"); sg.Parent = PlayerGui
+- UI móvil: botones min 50px altura, sin textos pequeños
+- Siempre cierra TODOS end/function. Scripts cortos si es simple
+- Usa SOLO rutas que aparecen en el contexto si hay escaneo. Si NO hay contexto, itera Workspace con pcall
+- PCALL todo lo que acceda a Instances: pcall(function() ... end)
+- Manejo de errores con try-catch mental: si falla acceso, continúa
+- NO crées loops infinitos sin delays
+- NO hagas Remote calls sin validar que existan
+- Para ESP: itera paths reales con pcall, dibuja con esperas para evitar lag`;
 
     let userContent = message;
     if (worldContext) {
