@@ -18,8 +18,16 @@ Al menos una de las dos keys de IA debe estar configurada.
 |----------|------------|-----|
 | Claude · Haiku | `claude-3-5-haiku-20241022` | Más barato |
 | Claude · Sonnet | `claude-sonnet-4-6` | Mejor calidad |
-| Gemini · Flash | `gemini-2.0-flash` | Rápido / económico |
-| Gemini · Pro | `gemini-1.5-pro` | Más capaz |
+| Gemini · Flash | `gemini-2.5-flash` (+ fallback) | Gratis con límites |
+| Gemini · Pro | `gemini-1.5-pro` (+ fallback) | Más capaz |
+
+### Si sale "quota exceeded" en Gemini
+
+La API gratis de Google tiene límite diario/por minuto. Opciones:
+
+1. Esperar ~1 minuto y volver a intentar  
+2. Cambiar a **Claude → Haiku** en la app  
+3. Revisar uso en [Google AI Studio](https://aistudio.google.com/)
 
 ## Desarrollo local
 
