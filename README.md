@@ -29,6 +29,18 @@ La API gratis de Google tiene límite diario/por minuto. Opciones:
 2. Cambiar a **Claude → Haiku** en la app  
 3. Revisar uso en [Google AI Studio](https://aistudio.google.com/)
 
+
+## Cliente Roblox (loadstring)
+
+Archivo: `client/loadstring.lua`
+
+1. Abre tu exploit en Roblox  
+2. Pega el script **una sola vez** y ejecútalo  
+3. En la web, genera un script y pulsa **Ejecutar en Roblox**  
+4. El cliente lo recibe en ~1 s y lo ejecuta automáticamente  
+
+La variable `API` al inicio del archivo debe apuntar a tu URL de Railway.
+
 ## Desarrollo local
 
 ```bash
