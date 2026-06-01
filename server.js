@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const fs = require('fs-extra');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
@@ -8,201 +7,116 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-const SCRIPTS_DIR = '/tmp/roblox-scripts';
-const CONFIG_FILE = '/tmp/server-config.json';
-
-let config = {
-    scripts: {},
-    executionHistory: [],
-    pendingExecutions: {},
-    lastUpdated: new Date().toISOString()
+// Estado en memoria
+let state = {
+    pendingScript: null,      // Script esperando ser ejecutado
+    connections: {},          // Clientes Roblox conectados
+    lastResult: null          // Último resultado de ejecución
 };
 
-async function initialize() {
-    try {
-        await fs.ensureDir(SCRIPTS_DIR);
-        if (await fs.pathExists(CONFIG_FILE)) {
-            config = await fs.readJson(CONFIG_FILE);
-        } else {
-            await fs.writeJson(CONFIG_FILE, config);
+// Limpiar conexiones inactivas cada 10 segundos
+setInterval(() => {
+    const now = Date.now();
+    Object.keys(state.connections).forEach(id => {
+        if (now - state.connections[id].lastSeen > 15000) {
+            delete state.connections[id];
         }
-        console.log('✓ Servidor inicializado');
-    } catch (error) {
-        console.error('Error:', error);
-    }
-}
-
-function validateLua(code) {
-    const errors = [];
-    const brackets = { '(': 0, '[': 0, '{': 0 };
-    const closing = { ')': '(', ']': '[', '}': '{' };
-    for (let i = 0; i < code.length; i++) {
-        const char = code[i];
-        if (brackets.hasOwnProperty(char)) brackets[char]++;
-        else if (closing.hasOwnProperty(char)) brackets[closing[char]]--;
-    }
-    Object.entries(brackets).forEach(([bracket, count]) => {
-        if (count > 0) errors.push(`${count} '${bracket}' sin cerrar`);
-        if (count < 0) errors.push(`'${bracket}' cerrado sin abrir`);
     });
-    return { isValid: errors.length === 0, errors };
-}
+}, 10000);
 
-// RUTAS BÁSICAS
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', version: '3.0.0' });
-});
+// ============================================================
+// RUTAS PARA ROBLOX (llamadas desde el loadstring)
+// ============================================================
 
-app.get('/api/scripts', async (req, res) => {
-    try {
-        const scripts = {};
-        const files = await fs.readdir(SCRIPTS_DIR);
-        for (const file of files) {
-            if (file.endsWith('.lua')) {
-                const name = file.replace('.lua', '');
-                scripts[name] = await fs.readFile(path.join(SCRIPTS_DIR, file), 'utf-8');
-            }
-        }
-        res.json({ success: true, scripts });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+// Roblox hace heartbeat aquí para registrarse como conectado
+app.post('/api/heartbeat', (req, res) => {
+    const { clientId, game, player } = req.body;
+    const id = clientId || uuidv4();
+
+    state.connections[id] = {
+        id,
+        game: game || 'Unknown',
+        player: player || 'Unknown',
+        lastSeen: Date.now(),
+        connectedAt: state.connections[id]?.connectedAt || Date.now()
+    };
+
+    // Hay script pendiente? Devuélvelo y límpialo
+    let toExecute = null;
+    if (state.pendingScript) {
+        toExecute = state.pendingScript;
+        state.pendingScript = null;
     }
+
+    res.json({
+        success: true,
+        clientId: id,
+        execute: toExecute  // null o { id, code }
+    });
 });
 
-app.post('/api/scripts', async (req, res) => {
-    const { scripts: uploadedScripts } = req.body;
-    try {
-        let saved = 0;
-        for (const [name, code] of Object.entries(uploadedScripts || {})) {
-            const filePath = path.join(SCRIPTS_DIR, `${name}.lua`);
-            await fs.writeFile(filePath, code, 'utf-8');
-            config.scripts[name] = { savedAt: new Date().toISOString() };
-            saved++;
-        }
-        config.lastUpdated = new Date().toISOString();
-        await fs.writeJson(CONFIG_FILE, config);
-        res.json({ success: true, saved });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+// Roblox envía resultado de ejecución
+app.post('/api/result', (req, res) => {
+    const { executionId, success, output, error } = req.body;
+    state.lastResult = {
+        executionId,
+        success,
+        output: output || '',
+        error: error || '',
+        timestamp: Date.now()
+    };
+    res.json({ success: true });
 });
 
-app.post('/api/validate', (req, res) => {
+// ============================================================
+// RUTAS PARA LA WEB APP
+// ============================================================
+
+// Web app envía script para ejecutar
+app.post('/api/execute', (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
-    const validation = validateLua(code);
-    res.json({ success: true, isValid: validation.isValid, errors: validation.errors });
+
+    const executionId = uuidv4();
+    state.pendingScript = { id: executionId, code };
+    state.lastResult = null;
+
+    res.json({ success: true, executionId });
 });
 
-app.get('/api/scripts/:name', async (req, res) => {
-    try {
-        const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
-        if (!await fs.pathExists(filePath)) {
-            return res.status(404).json({ success: false, error: 'No encontrado' });
-        }
-        const code = await fs.readFile(filePath, 'utf-8');
-        res.json({ success: true, code });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
+// Web app consulta resultado
+app.get('/api/result/:id', (req, res) => {
+    if (state.lastResult && state.lastResult.executionId === req.params.id) {
+        res.json({ success: true, result: state.lastResult });
+    } else {
+        res.json({ success: false, pending: true });
     }
 });
 
-app.delete('/api/scripts/:name', async (req, res) => {
-    try {
-        const filePath = path.join(SCRIPTS_DIR, `${req.params.name}.lua`);
-        if (await fs.pathExists(filePath)) {
-            await fs.remove(filePath);
-            delete config.scripts[req.params.name];
-            await fs.writeJson(CONFIG_FILE, config);
-            res.json({ success: true });
-        } else {
-            res.status(404).json({ success: false, error: 'No encontrado' });
-        }
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
+// Web app obtiene estado general
+app.get('/api/status', (req, res) => {
+    const connections = Object.values(state.connections);
+    res.json({
+        success: true,
+        connections: connections.length,
+        clients: connections,
+        hasPending: !!state.pendingScript,
+        lastResult: state.lastResult
+    });
 });
 
-// INYECCIÓN REMOTA
-app.post('/api/execute-remote', async (req, res) => {
-    const { scriptName, code, parameters } = req.body;
-    if (!scriptName || !code) {
-        return res.status(400).json({ success: false, error: 'Falta código o nombre' });
-    }
-    try {
-        const validation = validateLua(code);
-        if (!validation.isValid) {
-            return res.json({ success: false, error: `Errores: ${validation.errors.join(', ')}` });
-        }
-        const executionId = uuidv4();
-        config.pendingExecutions[executionId] = {
-            id: executionId,
-            name: scriptName,
-            code: code,
-            parameters: parameters || {},
-            createdAt: new Date().toISOString(),
-            status: 'pending'
-        };
-        const filePath = path.join(SCRIPTS_DIR, `${scriptName}.lua`);
-        await fs.writeFile(filePath, code, 'utf-8');
-        config.scripts[scriptName] = { savedAt: new Date().toISOString() };
-        await fs.writeJson(CONFIG_FILE, config);
-        res.json({ success: true, executionId, message: 'Script pendiente' });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-app.get('/api/pending-executions', (req, res) => {
-    const pending = Object.values(config.pendingExecutions)
-        .filter(exec => exec.status === 'pending')
-        .slice(0, 5);
-    res.json({ success: true, count: pending.length, executions: pending });
-});
-
-app.post('/api/execution/:id/result', (req, res) => {
-    const { id } = req.params;
-    const { success, output, error, executionTime } = req.body;
-    try {
-        if (config.pendingExecutions[id]) {
-            config.pendingExecutions[id].status = success ? 'completed' : 'error';
-            config.pendingExecutions[id].result = { success, output, error, executionTime };
-            config.pendingExecutions[id].completedAt = new Date().toISOString();
-            config.executionHistory.push({
-                executionId: id,
-                scriptName: config.pendingExecutions[id].name,
-                timestamp: new Date().toISOString(),
-                success, output
-            });
-            if (config.executionHistory.length > 100) {
-                config.executionHistory = config.executionHistory.slice(-100);
-            }
-            fs.writeJson(CONFIG_FILE, config);
-        }
-        res.json({ success: true });
-    } catch (error) {
-        res.status(500).json({ success: false, error: error.message });
-    }
-});
-
-app.get('/api/execution/:id/status', (req, res) => {
-    const execution = config.pendingExecutions[req.params.id];
-    if (!execution) return res.status(404).json({ success: false, error: 'No encontrado' });
-    res.json({ success: true, execution });
+// Health check
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', version: '4.0.0' });
 });
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-async function start() {
-    await initialize();
-    app.listen(PORT, () => {
-        console.log(`🚀 Servidor activo en puerto ${PORT}`);
-    });
-}
-
-start().catch(console.error);
+app.listen(PORT, () => {
+    console.log(`🚀 Servidor activo en puerto ${PORT}`);
+});
