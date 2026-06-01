@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
+const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -10,14 +11,13 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Estado en memoria
 let state = {
-    pendingScript: null,      // Script esperando ser ejecutado
-    connections: {},          // Clientes Roblox conectados
-    lastResult: null          // Último resultado de ejecución
+    pendingScript: null,
+    connections: {},
+    lastResult: null
 };
 
-// Limpiar conexiones inactivas cada 10 segundos
+// Limpiar conexiones inactivas cada 10s
 setInterval(() => {
     const now = Date.now();
     Object.keys(state.connections).forEach(id => {
@@ -27,11 +27,8 @@ setInterval(() => {
     });
 }, 10000);
 
-// ============================================================
-// RUTAS PARA ROBLOX (llamadas desde el loadstring)
-// ============================================================
+// ── ROBLOX ROUTES ──────────────────────────────────────
 
-// Roblox hace heartbeat aquí para registrarse como conectado
 app.post('/api/heartbeat', (req, res) => {
     const { clientId, game, player } = req.body;
     const id = clientId || uuidv4();
@@ -44,21 +41,15 @@ app.post('/api/heartbeat', (req, res) => {
         connectedAt: state.connections[id]?.connectedAt || Date.now()
     };
 
-    // Hay script pendiente? Devuélvelo y límpialo
     let toExecute = null;
     if (state.pendingScript) {
         toExecute = state.pendingScript;
         state.pendingScript = null;
     }
 
-    res.json({
-        success: true,
-        clientId: id,
-        execute: toExecute  // null o { id, code }
-    });
+    res.json({ success: true, clientId: id, execute: toExecute });
 });
 
-// Roblox envía resultado de ejecución
 app.post('/api/result', (req, res) => {
     const { executionId, success, output, error } = req.body;
     state.lastResult = {
@@ -71,11 +62,8 @@ app.post('/api/result', (req, res) => {
     res.json({ success: true });
 });
 
-// ============================================================
-// RUTAS PARA LA WEB APP
-// ============================================================
+// ── WEB APP ROUTES ─────────────────────────────────────
 
-// Web app envía script para ejecutar
 app.post('/api/execute', (req, res) => {
     const { code } = req.body;
     if (!code) return res.status(400).json({ success: false, error: 'Sin código' });
@@ -87,7 +75,6 @@ app.post('/api/execute', (req, res) => {
     res.json({ success: true, executionId });
 });
 
-// Web app consulta resultado
 app.get('/api/result/:id', (req, res) => {
     if (state.lastResult && state.lastResult.executionId === req.params.id) {
         res.json({ success: true, result: state.lastResult });
@@ -96,7 +83,6 @@ app.get('/api/result/:id', (req, res) => {
     }
 });
 
-// Web app obtiene estado general
 app.get('/api/status', (req, res) => {
     const connections = Object.values(state.connections);
     res.json({
@@ -108,10 +94,51 @@ app.get('/api/status', (req, res) => {
     });
 });
 
-// Health check
-app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', version: '4.0.0' });
+// ── CLAUDE PROXY ───────────────────────────────────────
+
+app.post('/api/ai', async (req, res) => {
+    const { message } = req.body;
+    if (!message) return res.status(400).json({ error: 'Sin mensaje' });
+
+    try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'x-api-key': process.env.ANTHROPIC_API_KEY,
+                'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+                model: 'claude-sonnet-4-6',
+                max_tokens: 2000,
+                system: `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit executor.
+
+REGLAS ESTRICTAS:
+- Responde SOLO con código Lua puro
+- CERO explicaciones, CERO markdown, CERO backticks
+- El código debe funcionar desde el cliente (LocalScript context)
+- Para UI mobile: ScreenGui con botones grandes táctiles (mínimo 50px alto)
+- Siempre usa variables locales
+- Código 100% completo y funcional`,
+                messages: [{ role: 'user', content: message }]
+            })
+        });
+
+        const data = await response.json();
+
+        if (data.content && data.content[0]) {
+            res.json({ success: true, code: data.content[0].text.trim() });
+        } else {
+            res.json({ success: false, error: 'Sin respuesta de IA' });
+        }
+    } catch (e) {
+        res.status(500).json({ success: false, error: e.message });
+    }
 });
+
+// ── START ──────────────────────────────────────────────
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.0.0' }));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
