@@ -6,7 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = '4.3.0';
+const VERSION = '4.3.1';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -66,9 +66,26 @@ function stripCodeFences(text) {
     return s.replace(/^```(?:lua)?\n?/i, '').replace(/\n?```$/i, '').trim();
 }
 
-function geminiModelId(model) {
-    if (model === 'gemini-pro') return 'gemini-1.5-pro';
-    return 'gemini-2.0-flash';
+const GEMINI_FLASH_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
+const GEMINI_PRO_MODELS = ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite'];
+
+function geminiModelCandidates(model) {
+    return model === 'gemini-pro' ? GEMINI_PRO_MODELS : GEMINI_FLASH_MODELS;
+}
+
+function isQuotaError(msg) {
+    if (!msg) return false;
+    const m = String(msg).toLowerCase();
+    return m.includes('quota') || m.includes('rate limit') || m.includes('resource_exhausted') || m.includes('exceeded');
+}
+
+function userFriendlyError(raw) {
+    if (!raw) return 'Error desconocido';
+    if (isQuotaError(raw)) {
+        return 'Cuota gratis de Gemini agotada. Espera 1 minuto, usa Claude → Haiku, o revisa límites en aistudio.google.com';
+    }
+    const line = String(raw).split('\n')[0];
+    return line.length > 220 ? line.slice(0, 220) + '…' : line;
 }
 
 function apiErrorMessage(result, fallback) {
@@ -197,28 +214,40 @@ REGLAS:
                 return res.status(500).json({ success: false, error: 'Falta GEMINI_API_KEY en Railway' });
             }
 
-            const geminiModel = geminiModelId(model);
-            result = await httpsPost(
-                'generativelanguage.googleapis.com',
-                `/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
-                { 'Content-Type': 'application/json' },
-                {
-                    system_instruction: { parts: [{ text: systemPrompt }] },
-                    contents: [{ role: 'user', parts: [{ text: message }] }],
-                    generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
-                }
-            );
+            const candidates = geminiModelCandidates(model);
+            const geminiBody = {
+                system_instruction: { parts: [{ text: systemPrompt }] },
+                contents: [{ role: 'user', parts: [{ text: message }] }],
+                generationConfig: { maxOutputTokens: 2000, temperature: 0.7 }
+            };
 
-            const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
-            if (part?.text) {
-                return res.json({ success: true, code: stripCodeFences(part.text), model });
+            let lastRaw = '';
+            for (const geminiModel of candidates) {
+                result = await httpsPost(
+                    'generativelanguage.googleapis.com',
+                    `/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
+                    { 'Content-Type': 'application/json' },
+                    geminiBody
+                );
+
+                const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
+                if (part?.text) {
+                    return res.json({
+                        success: true,
+                        code: stripCodeFences(part.text),
+                        model,
+                        geminiModel
+                    });
+                }
+
+                lastRaw = apiErrorMessage(result, 'Sin respuesta Gemini');
+                if (!isQuotaError(lastRaw)) break;
             }
 
-            const finish = result.candidates?.[0]?.finishReason;
-            const suffix = finish && finish !== 'STOP' ? ` (${finish})` : '';
             return res.json({
                 success: false,
-                error: apiErrorMessage(result, 'Sin respuesta Gemini') + suffix
+                error: userFriendlyError(lastRaw),
+                errorType: isQuotaError(lastRaw) ? 'quota' : 'api'
             });
         }
 
