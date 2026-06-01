@@ -141,7 +141,7 @@ function stripCodeFences(text) {
 }
 
 const GEMINI_FLASH_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash'];
-const GEMINI_PRO_MODELS = ['gemini-2.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash-lite'];
+const GEMINI_PRO_MODELS = ['gemini-1.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash-lite'];
 
 function isLuaComplete(code) {
     if (!code || typeof code !== 'string') return false;
@@ -521,7 +521,7 @@ REGLAS:
             if (!keys.length) {
                 return res.status(500).json({ success: false, error: 'Falta ANTHROPIC_API_KEY en Railway' });
             }
-            const anthropicModel = model === 'claude-haiku' ? 'claude-3-5-haiku-20241022' : 'claude-sonnet-4-6';
+            const anthropicModel = model === 'claude-haiku' ? 'claude-haiku-4-5-20251001' : 'claude-sonnet-4-6';
             let lastErr = '';
             for (let k = 0; k < keys.length; k++) {
                 const apiKey = keys[(keyPoolIndex.anthropic + k) % keys.length];
@@ -595,14 +595,7 @@ REGLAS:
     }
 });
 
-app.get('/api/health', (req, res) => res.json({
-    status: 'ok',
-    version: VERSION,
-    claude: getAnthropicKeys().length > 0,
-    gemini: getGeminiKeys().length > 0,
-    free: hasFreeProviders(),
-    keyPools: { gemini: getGeminiKeys().length, openrouter: process.env.OPENROUTER_API_KEY ? 1 : 0, groq: process.env.GROQ_API_KEY ? 1 : 0 }
-}));
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: VERSION }));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
