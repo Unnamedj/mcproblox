@@ -6,7 +6,7 @@ const https = require('https');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const VERSION = '4.5.1';
+const VERSION = '4.6.0';
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -206,6 +206,188 @@ function apiErrorMessage(result, fallback) {
     return fallback;
 }
 
+
+const keyPoolIndex = { gemini: 0, anthropic: 0 };
+
+function parseApiKeys(multiEnv, singleEnv) {
+    const raw = process.env[multiEnv] || process.env[singleEnv] || '';
+    return String(raw).split(/[,;\n|]+/).map(k => k.trim()).filter(Boolean);
+}
+
+function getGeminiKeys() {
+    return parseApiKeys('GEMINI_API_KEYS', 'GEMINI_API_KEY');
+}
+
+function getAnthropicKeys() {
+    return parseApiKeys('ANTHROPIC_API_KEYS', 'ANTHROPIC_API_KEY');
+}
+
+function hasFreeProviders() {
+    return getGeminiKeys().length > 0
+        || Boolean(process.env.OPENROUTER_API_KEY)
+        || Boolean(process.env.GROQ_API_KEY);
+}
+
+async function callChatCompletions(opts) {
+    const { host, path, apiKey, model, systemPrompt, userContent, maxTokens, headers = {} } = opts;
+    const result = await httpsPost(host, path, {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+        ...headers
+    }, {
+        model,
+        max_tokens: maxTokens,
+        temperature: 0.7,
+        messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userContent }
+        ]
+    });
+    const text = result.choices?.[0]?.message?.content;
+    if (text) {
+        return {
+            ok: true,
+            text,
+            finish: result.choices?.[0]?.finish_reason || 'stop'
+        };
+    }
+    return { ok: false, error: apiErrorMessage(result, 'Sin respuesta'), retryable: isQuotaError(apiErrorMessage(result, '')) };
+}
+
+async function callGeminiKey(apiKey, geminiModel, geminiBody) {
+    const result = await httpsPost(
+        'generativelanguage.googleapis.com',
+        `/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
+        { 'Content-Type': 'application/json' },
+        geminiBody
+    );
+    const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
+    if (part?.text) {
+        return {
+            ok: true,
+            text: part.text,
+            finish: result.candidates?.[0]?.finishReason || 'STOP'
+        };
+    }
+    const err = apiErrorMessage(result, 'Sin respuesta Gemini');
+    return { ok: false, error: err, retryable: isQuotaError(err) };
+}
+
+async function callGeminiRotating(keys, modelId, geminiBody) {
+    if (!keys.length) return { ok: false, error: 'Sin keys de Gemini' };
+    const models = geminiModelCandidates(modelId);
+    let lastError = '';
+    for (let k = 0; k < keys.length; k++) {
+        const apiKey = keys[(keyPoolIndex.gemini + k) % keys.length];
+        for (const geminiModel of models) {
+            const r = await callGeminiKey(apiKey, geminiModel, geminiBody);
+            if (r.ok) {
+                keyPoolIndex.gemini = (keyPoolIndex.gemini + k + 1) % keys.length;
+                return { ok: true, text: r.text, finish: r.finish, geminiModel, via: `gemini:${geminiModel}` };
+            }
+            lastError = r.error;
+            if (!r.retryable) return { ok: false, error: lastError };
+        }
+    }
+    keyPoolIndex.gemini = (keyPoolIndex.gemini + 1) % keys.length;
+    return { ok: false, error: lastError, retryable: isQuotaError(lastError) };
+}
+
+async function tryFreeProviders(systemPrompt, userContent, maxTokens) {
+    const attempts = [];
+
+    const orKey = process.env.OPENROUTER_API_KEY;
+    if (orKey) {
+        const orModels = (process.env.OPENROUTER_MODELS || 'qwen/qwen3-coder:free,meta-llama/llama-3.2-3b-instruct:free,google/gemma-3-4b-it:free')
+            .split(',').map(s => s.trim()).filter(Boolean);
+        for (const model of orModels) {
+            attempts.push({
+                name: `openrouter:${model}`,
+                run: () => callChatCompletions({
+                    host: 'openrouter.ai',
+                    path: '/api/v1/chat/completions',
+                    apiKey: orKey,
+                    model,
+                    systemPrompt,
+                    userContent,
+                    maxTokens,
+                    headers: {
+                        'HTTP-Referer': process.env.APP_URL || 'https://mcproblox-production.up.railway.app',
+                        'X-Title': 'RBX Executor'
+                    }
+                })
+            });
+        }
+    }
+
+    const groqKey = process.env.GROQ_API_KEY;
+    if (groqKey) {
+        const groqModels = (process.env.GROQ_MODELS || 'llama-3.1-8b-instant,llama-3.3-70b-versatile')
+            .split(',').map(s => s.trim()).filter(Boolean);
+        for (const model of groqModels) {
+            attempts.push({
+                name: `groq:${model}`,
+                run: () => callChatCompletions({
+                    host: 'api.groq.com',
+                    path: '/openai/v1/chat/completions',
+                    apiKey: groqKey,
+                    model,
+                    systemPrompt,
+                    userContent,
+                    maxTokens
+                })
+            });
+        }
+    }
+
+    const geminiKeys = getGeminiKeys();
+    if (geminiKeys.length) {
+        const geminiBody = {
+            system_instruction: { parts: [{ text: systemPrompt }] },
+            contents: [{ role: 'user', parts: [{ text: userContent }] }],
+            generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
+        };
+        attempts.push({
+            name: 'gemini-pool',
+            run: async () => {
+                const r = await callGeminiRotating(geminiKeys, 'gemini-flash', geminiBody);
+                if (r.ok) return { ok: true, text: r.text, finish: r.finish };
+                return { ok: false, error: r.error, retryable: r.retryable };
+            }
+        });
+    }
+
+    let lastError = 'No hay proveedores gratis configurados';
+    for (const a of attempts) {
+        try {
+            const r = await a.run();
+            if (r.ok) {
+                const fin = finalizeAiCode(r.text, r.finish);
+                if (fin.ok) return { ok: true, code: fin.code, via: a.name };
+                lastError = fin.error;
+                continue;
+            }
+            lastError = r.error || lastError;
+        } catch (e) {
+            lastError = e.message;
+        }
+    }
+    return { ok: false, error: userFriendlyError(lastError) };
+}
+
+function respondAiCode(res, fin, meta) {
+    if (!fin.ok) {
+        return res.json({
+            success: false,
+            error: fin.error,
+            partialCode: fin.code,
+            incomplete: true,
+            ...meta
+        });
+    }
+    return res.json({ success: true, code: fin.code, ...meta });
+}
+
 // ── ROBLOX ─────────────────────────────────────────────
 app.post('/api/heartbeat', (req, res) => {
     const { clientId, game, player, worldScan } = req.body;
@@ -291,10 +473,17 @@ app.get('/api/config', (req, res) => {
         success: true,
         version: VERSION,
         providers: {
-            claude: Boolean(process.env.ANTHROPIC_API_KEY),
-            gemini: Boolean(process.env.GEMINI_API_KEY)
+            claude: getAnthropicKeys().length > 0,
+            gemini: getGeminiKeys().length > 0,
+            free: hasFreeProviders()
         },
-        defaultModel: 'claude-haiku'
+        keyPools: {
+            gemini: getGeminiKeys().length,
+            anthropic: getAnthropicKeys().length,
+            openrouter: process.env.OPENROUTER_API_KEY ? 1 : 0,
+            groq: process.env.GROQ_API_KEY ? 1 : 0
+        },
+        defaultModel: 'free-auto'
     });
 });
 
@@ -328,89 +517,75 @@ REGLAS:
         let result;
 
         if (model === 'claude-haiku' || model === 'claude-sonnet') {
-            const apiKey = process.env.ANTHROPIC_API_KEY;
-            if (!apiKey) {
+            const keys = getAnthropicKeys();
+            if (!keys.length) {
                 return res.status(500).json({ success: false, error: 'Falta ANTHROPIC_API_KEY en Railway' });
             }
-
-            result = await httpsPost(
-                'api.anthropic.com',
-                '/v1/messages',
-                {
-                    'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
-                    'anthropic-version': '2023-06-01'
-                },
-                {
-                    model: model === 'claude-haiku' ? 'claude-3-5-haiku-20241022' : 'claude-sonnet-4-6',
-                    max_tokens: maxTokens,
-                    system: systemPrompt,
-                    messages: [{ role: 'user', content: userContent }]
+            const anthropicModel = model === 'claude-haiku' ? 'claude-3-5-haiku-20241022' : 'claude-sonnet-4-6';
+            let lastErr = '';
+            for (let k = 0; k < keys.length; k++) {
+                const apiKey = keys[(keyPoolIndex.anthropic + k) % keys.length];
+                result = await httpsPost(
+                    'api.anthropic.com',
+                    '/v1/messages',
+                    {
+                        'Content-Type': 'application/json',
+                        'x-api-key': apiKey,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    {
+                        model: anthropicModel,
+                        max_tokens: maxTokens,
+                        system: systemPrompt,
+                        messages: [{ role: 'user', content: userContent }]
+                    }
+                );
+                if (result.content?.[0]?.text) {
+                    keyPoolIndex.anthropic = (keyPoolIndex.anthropic + k + 1) % keys.length;
+                    const fin = finalizeAiCode(result.content[0].text, result.stop_reason);
+                    return respondAiCode(res, fin, { model, usedScan: Boolean(worldContext), via: 'claude' });
                 }
-            );
-
-            if (result.content?.[0]?.text) {
-                const fin = finalizeAiCode(result.content[0].text, result.stop_reason);
-                if (!fin.ok) {
-                    return res.json({ success: false, error: fin.error, partialCode: fin.code, incomplete: true });
-                }
-                return res.json({ success: true, code: fin.code, model, usedScan: Boolean(worldContext) });
+                lastErr = apiErrorMessage(result, 'Sin respuesta Claude');
+                if (!isQuotaError(lastErr)) break;
             }
-            return res.json({ success: false, error: apiErrorMessage(result, 'Sin respuesta Claude') });
+            keyPoolIndex.anthropic = (keyPoolIndex.anthropic + 1) % keys.length;
+            const fb = await tryFreeProviders(systemPrompt, userContent, maxTokens);
+            if (fb.ok) return res.json({ success: true, code: fb.code, model, via: fb.via, usedScan: Boolean(worldContext) });
+            return res.json({ success: false, error: lastErr || fb.error, errorType: 'quota' });
         }
 
         if (model === 'gemini-flash' || model === 'gemini-pro') {
-            const apiKey = process.env.GEMINI_API_KEY;
-            if (!apiKey) {
+            const keys = getGeminiKeys();
+            if (!keys.length) {
                 return res.status(500).json({ success: false, error: 'Falta GEMINI_API_KEY en Railway' });
             }
-
-            const candidates = geminiModelCandidates(model);
             const geminiBody = {
                 system_instruction: { parts: [{ text: systemPrompt }] },
                 contents: [{ role: 'user', parts: [{ text: userContent }] }],
                 generationConfig: { maxOutputTokens: maxTokens, temperature: 0.7 }
             };
-
-            let lastRaw = '';
-            for (const geminiModel of candidates) {
-                result = await httpsPost(
-                    'generativelanguage.googleapis.com',
-                    `/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
-                    { 'Content-Type': 'application/json' },
-                    geminiBody
-                );
-
-                const part = result.candidates?.[0]?.content?.parts?.find(p => p.text);
-                if (part?.text) {
-                    const finish = result.candidates?.[0]?.finishReason;
-                    const fin = finalizeAiCode(part.text, finish);
-                    if (!fin.ok) {
-                        return res.json({
-                            success: false,
-                            error: fin.error,
-                            partialCode: fin.code,
-                            incomplete: true,
-                            errorType: finish === 'MAX_TOKENS' ? 'truncated' : 'incomplete'
-                        });
-                    }
-                    return res.json({
-                        success: true,
-                        code: fin.code,
-                        model,
-                        geminiModel
-                    });
-                }
-
-                lastRaw = apiErrorMessage(result, 'Sin respuesta Gemini');
-                if (!isQuotaError(lastRaw)) break;
+            const gr = await callGeminiRotating(keys, model, geminiBody);
+            if (gr.ok) {
+                const fin = finalizeAiCode(gr.text, gr.finish);
+                return respondAiCode(res, fin, { model, geminiModel: gr.geminiModel, via: gr.via, usedScan: Boolean(worldContext) });
             }
-
+            const fb = await tryFreeProviders(systemPrompt, userContent, maxTokens);
+            if (fb.ok) {
+                return res.json({ success: true, code: fb.code, model, via: fb.via, usedScan: Boolean(worldContext) });
+            }
             return res.json({
                 success: false,
-                error: userFriendlyError(lastRaw),
-                errorType: isQuotaError(lastRaw) ? 'quota' : 'api'
+                error: userFriendlyError(gr.error || fb.error),
+                errorType: 'quota'
             });
+        }
+
+        if (model === 'free-auto') {
+            const fb = await tryFreeProviders(systemPrompt, userContent, maxTokens);
+            if (fb.ok) {
+                return res.json({ success: true, code: fb.code, model, via: fb.via, usedScan: Boolean(worldContext) });
+            }
+            return res.json({ success: false, error: fb.error, errorType: 'quota' });
         }
 
         return res.status(400).json({ success: false, error: 'Modelo desconocido' });
@@ -423,8 +598,10 @@ REGLAS:
 app.get('/api/health', (req, res) => res.json({
     status: 'ok',
     version: VERSION,
-    claude: Boolean(process.env.ANTHROPIC_API_KEY),
-    gemini: Boolean(process.env.GEMINI_API_KEY)
+    claude: getAnthropicKeys().length > 0,
+    gemini: getGeminiKeys().length > 0,
+    free: hasFreeProviders(),
+    keyPools: { gemini: getGeminiKeys().length, openrouter: process.env.OPENROUTER_API_KEY ? 1 : 0, groq: process.env.GROQ_API_KEY ? 1 : 0 }
 }));
 
 app.get('/', (req, res) => {

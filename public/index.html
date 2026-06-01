@@ -34,11 +34,13 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 .model-bar{flex-shrink:0;padding:10px 16px 12px;border-bottom:1px solid var(--border);background:var(--surface)}
 .model-bar-label{font-size:.68rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:8px}
-.provider-tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.provider-tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px}
 .provider-tab{display:flex;align-items:center;justify-content:center;gap:8px;min-height:44px;padding:10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);background:var(--surface-2);color:var(--muted);font-family:inherit;font-size:.88rem;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .provider-tab:active:not(:disabled){transform:scale(.98)}
 .provider-tab.claude.active{border-color:var(--claude);background:var(--claude-dim);color:#f0b8a4}
 .provider-tab.gemini.active{border-color:var(--gemini);background:var(--gemini-dim);color:#a8c4ff}
+.provider-tab.free.active{border-color:#a78bfa;background:rgba(167,139,250,.15);color:#d4c4ff}
+.provider-tab.free .provider-dot{background:#a78bfa}
 .provider-tab.unavailable{opacity:.5;cursor:not-allowed}
 .provider-dot{width:8px;height:8px;border-radius:50%}
 .provider-tab.claude .provider-dot{background:var(--claude)}
@@ -52,6 +54,8 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 .model-bar[data-provider=claude] .tier-btn.selected .tier-badge{background:var(--claude);color:#fff}
 .model-bar[data-provider=gemini] .tier-btn.selected{border-color:var(--gemini);background:var(--gemini-dim)}
 .model-bar[data-provider=gemini] .tier-btn.selected .tier-badge{background:var(--gemini);color:#fff}
+.model-bar[data-provider=free] .tier-btn.selected{border-color:#a78bfa;background:rgba(167,139,250,.12)}
+.model-bar[data-provider=free] .tier-btn.selected .tier-badge{background:#a78bfa;color:#fff}
 .shell{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .app-body{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .view{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden}
@@ -110,6 +114,7 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
     <div class="provider-tabs">
       <button type="button" class="provider-tab claude active" data-provider="claude"><span class="provider-dot"></span>Claude</button>
       <button type="button" class="provider-tab gemini" data-provider="gemini"><span class="provider-dot"></span>Gemini</button>
+      <button type="button" class="provider-tab free" data-provider="free"><span class="provider-dot"></span>Gratis</button>
     </div>
     <div class="tier-options" id="tierOptions"></div>
   </section>
@@ -145,15 +150,15 @@ body{font-family:'DM Sans',system-ui,sans-serif;background:var(--bg);color:var(-
 <div class="toast" id="toast"></div>
 <script>
 const API=window.location.origin,STORAGE_KEY='rbx-ai-model';
-const MODELS={claude:[{id:'claude-haiku',name:'Haiku',desc:'Más barato',badge:'Económico'},{id:'claude-sonnet',name:'Sonnet',desc:'Mejor calidad',badge:'Pro'}],gemini:[{id:'gemini-flash',name:'Flash',desc:'Gratis con límites',badge:'Flash'},{id:'gemini-pro',name:'Pro',desc:'Más capaz',badge:'Pro'}]};
+const MODELS={claude:[{id:'claude-haiku',name:'Haiku',desc:'Más barato',badge:'Económico'},{id:'claude-sonnet',name:'Sonnet',desc:'Mejor calidad',badge:'Pro'}],gemini:[{id:'gemini-flash',name:'Flash',desc:'Google AI',badge:'Flash'},{id:'gemini-pro',name:'Pro',desc:'Más capaz',badge:'Pro'}],free:[{id:'free-auto',name:'Auto',desc:'Rota keys + OpenRouter/Groq',badge:'Recomendado'}]};
 let activeClientId=null;
-let state={provider:'claude',modelId:'claude-haiku'},providers={claude:true,gemini:true};
-async function loadConfig(){try{const r=await fetch(API+'/api/config');const d=await r.json();if(d.providers){providers=d.providers;document.querySelectorAll('.provider-tab').forEach(t=>{const ok=providers[t.dataset.provider];t.classList.toggle('unavailable',!ok);t.disabled=!ok});if(!providers[state.provider]){const f=providers.claude?'claude':providers.gemini?'gemini':null;if(f)setProvider(f)}}}catch(_){}}
+let state={provider:'free',modelId:'free-auto'},providers={claude:true,gemini:true,free:true};
+async function loadConfig(){try{const r=await fetch(API+'/api/config');const d=await r.json();if(d.providers){providers=d.providers;if(providers.free&&!providers.claude&&!providers.gemini)setProvider('free');else if(!providers[state.provider]){const f=providers.free?'free':providers.claude?'claude':providers.gemini?'gemini':null;if(f)setProvider(f)}document.querySelectorAll('.provider-tab').forEach(t=>{const ok=providers[t.dataset.provider];t.classList.toggle('unavailable',!ok);t.disabled=!ok});if(!providers[state.provider]){const f=providers.claude?'claude':providers.gemini?'gemini':null;if(f)setProvider(f)}}}catch(_){}}
 function loadModelPref(){try{const s=localStorage.getItem(STORAGE_KEY);if(!s)return;const p=JSON.parse(s);if(p.provider&&MODELS[p.provider]){state.provider=p.provider;if(MODELS[p.provider].some(t=>t.id===p.modelId))state.modelId=p.modelId}}catch(_){}}
 function saveModelPref(){localStorage.setItem(STORAGE_KEY,JSON.stringify({provider:state.provider,modelId:state.modelId}))}
 function renderTiers(){const el=document.getElementById('tierOptions');el.innerHTML=MODELS[state.provider].map(t=>'<button type="button" class="tier-btn '+(t.id===state.modelId?'selected':'')+'" data-model="'+t.id+'"><span class="tier-badge">'+t.badge+'</span><span class="tier-name">'+t.name+'</span><span class="tier-desc">'+t.desc+'</span></button>').join('');el.querySelectorAll('.tier-btn').forEach(b=>b.addEventListener('click',()=>{state.modelId=b.dataset.model;saveModelPref();renderTiers();showToast(modelLabel())}))}
 function setProvider(p){state.provider=p;if(!MODELS[p].some(t=>t.id===state.modelId))state.modelId=MODELS[p][0].id;document.getElementById('modelBar').dataset.provider=p;document.querySelectorAll('.provider-tab').forEach(t=>{const on=t.dataset.provider===p;t.classList.toggle('active',on);t.setAttribute('aria-pressed',on)});saveModelPref();renderTiers()}
-function modelLabel(){const t=MODELS[state.provider].find(x=>x.id===state.modelId);return t?(state.provider==='claude'?'Claude':'Gemini')+' · '+t.name:state.provider}
+function modelLabel(){const t=MODELS[state.provider].find(x=>x.id===state.modelId);const pn={claude:'Claude',gemini:'Gemini',free:'Gratis'};return t?(pn[state.provider]||state.provider)+' · '+t.name:state.provider}
 document.querySelectorAll('.provider-tab').forEach(t=>t.addEventListener('click',()=>{if(t.disabled){showToast('Añade la API key en Railway');return}setProvider(t.dataset.provider)}));
 loadModelPref();setProvider(state.provider);loadConfig();
 document.querySelectorAll('.tab-btn').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab-btn').forEach(x=>x.classList.toggle('active',x===b));document.getElementById('viewChat').classList.toggle('active',b.dataset.view==='chat');document.getElementById('viewEditor').classList.toggle('active',b.dataset.view==='editor')}));
@@ -161,8 +166,8 @@ function switchToEditor(){if(matchMedia('(max-width:899px)').matches)document.qu
 document.querySelectorAll('.chip').forEach(c=>c.addEventListener('click',()=>{const i=document.getElementById('chatInput');i.value=c.dataset.prompt;i.dispatchEvent(new Event('input'));i.focus()}));
 async function pollStatus(){try{const r=await fetch(API+'/api/status');const d=await r.json();const n=d.connections||0;document.getElementById('connBadge').classList.toggle('online',n>0);document.getElementById('connLabel').textContent=n===1?'1 online':n+' online';const sb=document.getElementById('scanBadge');if(d.clients?.length){const best=d.clients.find(c=>c.hasScan)||d.clients[0];activeClientId=best.id;const sc=best.scan;if(sc&&sc.plotCount>0){sb.textContent='🗺️ Juego escaneado: '+(sc.nodeCount||sc.plotCount||0)+' rutas · la IA ve todo el contexto';sb.classList.add('visible')}else if(best.hasScan){sb.textContent='🗺️ Mapa completo enviado a la IA';sb.classList.add('visible')}else{sb.textContent='Conecta el loadstring para escanear el juego';sb.classList.remove('visible')}}else{activeClientId=null;sb.classList.remove('visible')}const p=document.getElementById('clientsPanel');if(d.clients?.length)p.innerHTML=d.clients.map(c=>{const tag=c.scan&&c.scan.plotCount?' · '+c.scan.plotCount+' plots':'';return'<div class="client-row"><span class="live"></span><span>'+esc(c.player||'?')+' · '+esc(c.game||'?')+tag+'</span></div>'}).join('');else p.innerHTML='<div class="clients-empty">Sin clientes Roblox conectados</div>'}catch(_){}}
 setInterval(pollStatus,3000);pollStatus();
-function formatError(d){if(d.errorType==='quota'||/quota|exceeded/i.test(d.error||''))return d.error||'Cuota Gemini agotada. Usa Claude → Haiku.';if(d.incomplete||d.errorType==='truncated')return d.error||'Código incompleto. Prueba Claude → Haiku.';return d.error||'Sin respuesta'}
-async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId,clientId:activeClientId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else{setBubble(ai,'⚠️ '+formatError(d));if(d.partialCode)document.getElementById('codeArea').value=d.partialCode}}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
+function formatError(d){if(d.errorType==='quota'||/quota|exceeded/i.test(d.error||''))return d.error||'Cuota agotada. Usa pestaña Gratis → Auto o añade más API keys.';if(d.incomplete||d.errorType==='truncated')return d.error||'Código incompleto. Prueba Claude → Haiku.';return d.error||'Sin respuesta'}
+async function sendMessage(){const i=document.getElementById('chatInput'),msg=i.value.trim();if(!msg)return;if(!providers[state.provider]){showToast('API key no configurada');return}document.getElementById('welcomeCard')?.remove();addMsg('user',msg);i.value='';i.style.height='auto';const btn=document.getElementById('btnSend');btn.disabled=true;const ai=addMsg('ai','',true);try{const r=await fetch(API+'/api/ai',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg,model:state.modelId,clientId:activeClientId})});const d=await r.json();if(d.success&&d.code){setBubble(ai,'✓ '+modelLabel()+(d.via?' ('+d.via+')':'')+'. Revisa el código.');document.getElementById('codeArea').value=d.code;setStatus('Script generado','ok');switchToEditor()}else{setBubble(ai,'⚠️ '+formatError(d));if(d.partialCode)document.getElementById('codeArea').value=d.partialCode}}catch(_){setBubble(ai,'Sin conexión al servidor')}btn.disabled=false}
 document.getElementById('btnSend').addEventListener('click',sendMessage);
 document.getElementById('chatInput').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'});
 document.getElementById('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage()}});
