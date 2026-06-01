@@ -1,701 +1,664 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-   <meta charset="UTF-8">
-   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>💻 Script Inyector - Roblox</title>
-   <style>
-       * {
-           margin: 0;
-           padding: 0;
-           box-sizing: border-box;
-       }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RBX Executor</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080b10;
+    --panel: #0d1117;
+    --border: #1e2730;
+    --accent: #00ff87;
+    --accent2: #00bfff;
+    --red: #ff4757;
+    --text: #cdd6f4;
+    --muted: #6b7280;
+    --glow: 0 0 20px rgba(0,255,135,0.3);
+  }
 
-       body {
-           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-           min-height: 100vh;
-           padding: 10px;
-       }
+  * { margin:0; padding:0; box-sizing:border-box; }
 
-       .container {
-           max-width: 1200px;
-           margin: 0 auto;
-           display: grid;
-           grid-template-columns: 1fr 1fr;
-           gap: 15px;
-           height: 100vh;
-       }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
 
-       @media (max-width: 768px) {
-           .container {
-               grid-template-columns: 1fr;
-               height: auto;
-           }
-       }
+  /* TOP BAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--panel);
+  }
 
-       .panel {
-           background: white;
-           border-radius: 15px;
-           padding: 20px;
-           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-           display: flex;
-           flex-direction: column;
-           overflow: hidden;
-       }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.2em;
+    font-weight: 800;
+    color: var(--accent);
+    letter-spacing: -0.5px;
+  }
 
-       .header {
-           display: flex;
-           align-items: center;
-           gap: 10px;
-           margin-bottom: 15px;
-           padding-bottom: 10px;
-           border-bottom: 2px solid #667eea;
-       }
+  .logo span { color: var(--text); }
 
-       .header h2 {
-           font-size: 1.4em;
-           color: #667eea;
-           flex: 1;
-       }
+  .connections {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8em;
+  }
 
-       .status {
-           padding: 6px 12px;
-           border-radius: 20px;
-           font-size: 0.8em;
-           font-weight: bold;
-           background: #10b981;
-           color: white;
-       }
+  .dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: all 0.3s;
+  }
 
-       .scripts-list {
-           flex: 1;
-           overflow-y: auto;
-           margin-bottom: 10px;
-           border: 1px solid #e5e7eb;
-           border-radius: 10px;
-           padding: 10px;
-       }
+  .dot.active {
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s infinite;
+  }
 
-       .script-item {
-           padding: 12px;
-           margin: 8px 0;
-           background: #f3f4f6;
-           border-left: 4px solid #667eea;
-           border-radius: 8px;
-           cursor: pointer;
-           transition: all 0.3s;
-           display: flex;
-           justify-content: space-between;
-           align-items: center;
-       }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
 
-       .script-item:hover {
-           background: #e5e7eb;
-           transform: translateX(5px);
-       }
+  .conn-count {
+    font-weight: 700;
+    color: var(--accent);
+  }
 
-       .script-item.active {
-           background: #667eea;
-           color: white;
-       }
+  /* MAIN LAYOUT */
+  .main {
+    display: flex;
+    flex: 1;
+    gap: 0;
+    overflow: hidden;
+  }
 
-       .script-name {
-           font-weight: bold;
-       }
+  @media (max-width: 768px) {
+    .main { flex-direction: column; }
+    .panel-left, .panel-right { width: 100%; height: 50vh; }
+  }
 
-       .script-size {
-           font-size: 0.8em;
-           opacity: 0.7;
-       }
+  /* PANELS */
+  .panel-left {
+    width: 45%;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+  }
 
-       .button-group {
-           display: flex;
-           gap: 10px;
-           flex-wrap: wrap;
-       }
+  .panel-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
 
-       button {
-           flex: 1;
-           min-width: 100px;
-           padding: 12px 16px;
-           border: none;
-           border-radius: 8px;
-           font-weight: bold;
-           cursor: pointer;
-           font-size: 0.95em;
-           transition: all 0.3s;
-       }
+  .panel-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 0.75em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
 
-       .btn-primary {
-           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-           color: white;
-       }
+  .panel-header .tag {
+    background: var(--accent);
+    color: var(--bg);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 0.8em;
+    font-weight: 700;
+  }
 
-       .btn-primary:hover {
-           transform: translateY(-2px);
-           box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
-       }
+  /* CHAT */
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
 
-       .btn-secondary {
-           background: #e5e7eb;
-           color: #333;
-       }
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
-       .btn-secondary:hover {
-           background: #d1d5db;
-       }
+  .msg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 90%;
+  }
 
-       .btn-danger {
-           background: #ef4444;
-           color: white;
-       }
+  .msg.user { align-self: flex-end; align-items: flex-end; }
+  .msg.ai { align-self: flex-start; align-items: flex-start; }
 
-       .btn-danger:hover {
-           background: #dc2626;
-       }
+  .msg-label {
+    font-size: 0.7em;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
 
-       .btn-success {
-           background: #22c55e;
-           color: white;
-       }
+  .msg-bubble {
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 0.85em;
+    line-height: 1.6;
+    white-space: pre-wrap;
+  }
 
-       .editor-header {
-           display: flex;
-           gap: 10px;
-           margin-bottom: 10px;
-           flex-wrap: wrap;
-           align-items: center;
-       }
+  .msg.user .msg-bubble {
+    background: rgba(0,255,135,0.1);
+    border: 1px solid rgba(0,255,135,0.2);
+    color: var(--text);
+  }
 
-       .editor-header input,
-       .editor-header textarea {
-           padding: 10px;
-           border: 1px solid #d1d5db;
-           border-radius: 8px;
-           font-size: 0.95em;
-       }
+  .msg.ai .msg-bubble {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
 
-       .editor-header input {
-           flex: 1;
-           min-width: 150px;
-       }
+  .msg.ai .msg-bubble.typing::after {
+    content: '▋';
+    animation: blink 1s infinite;
+  }
 
-       textarea {
-           flex: 1;
-           padding: 15px;
-           border: 1px solid #d1d5db;
-           border-radius: 8px;
-           font-family: 'Monaco', 'Courier New', monospace;
-           font-size: 0.95em;
-           resize: none;
-           line-height: 1.5;
-       }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
 
-       .console {
-           background: #1f2937;
-           color: #10b981;
-           padding: 12px;
-           border-radius: 8px;
-           font-family: 'Monaco', 'Courier New', monospace;
-           font-size: 0.85em;
-           max-height: 150px;
-           overflow-y: auto;
-           margin-top: 10px;
-           line-height: 1.4;
-       }
+  /* CHAT INPUT */
+  .chat-input-area {
+    padding: 12px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+  }
 
-       .console-log {
-           margin: 3px 0;
-       }
+  .chat-input {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    padding: 10px 14px;
+    resize: none;
+    min-height: 42px;
+    max-height: 120px;
+    outline: none;
+    transition: border 0.2s;
+  }
 
-       .console-error {
-           color: #ef4444;
-       }
+  .chat-input:focus { border-color: var(--accent); }
 
-       .console-success {
-           color: #10b981;
-       }
+  .chat-input::placeholder { color: var(--muted); }
 
-       .console-warn {
-           color: #f59e0b;
-       }
+  .btn-send {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
 
-       .console-info {
-           color: #3b82f6;
-       }
+  .btn-send:hover { box-shadow: var(--glow); }
+  .btn-send:disabled { opacity: 0.4; cursor: not-allowed; }
 
-       .stats {
-           display: grid;
-           grid-template-columns: 1fr 1fr;
-           gap: 10px;
-           margin-top: 10px;
-       }
+  /* CODE EDITOR */
+  .code-area {
+    flex: 1;
+    background: var(--bg);
+    border: none;
+    color: #a6e3a1;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    padding: 16px;
+    resize: none;
+    outline: none;
+    line-height: 1.6;
+  }
 
-       .stat {
-           background: #f3f4f6;
-           padding: 10px;
-           border-radius: 8px;
-           text-align: center;
-       }
+  .code-area::placeholder { color: var(--muted); }
 
-       .stat-value {
-           font-size: 1.4em;
-           font-weight: bold;
-           color: #667eea;
-       }
+  /* EXECUTE BAR */
+  .execute-bar {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background: var(--panel);
+  }
 
-       .stat-label {
-           font-size: 0.8em;
-           color: #6b7280;
-           margin-top: 5px;
-       }
+  .btn-execute {
+    background: var(--accent);
+    color: var(--bg);
+    border: none;
+    border-radius: 8px;
+    padding: 12px 24px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
 
-       .info-panel {
-           background: #f0f9ff;
-           border-left: 4px solid #0ea5e9;
-           padding: 12px;
-           border-radius: 8px;
-           margin-top: 10px;
-           font-size: 0.9em;
-       }
+  .btn-execute:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--glow);
+  }
 
-       .info-panel h4 {
-           color: #0ea5e9;
-           margin-bottom: 8px;
-       }
+  .btn-execute:active { transform: translateY(0); }
+  .btn-execute:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
-       .info-panel p {
-           margin: 5px 0;
-           color: #64748b;
-       }
+  .btn-clear {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.85em;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
 
-       .modal {
-           display: none;
-           position: fixed;
-           top: 0;
-           left: 0;
-           right: 0;
-           bottom: 0;
-           background: rgba(0, 0, 0, 0.5);
-           z-index: 1000;
-           align-items: center;
-           justify-content: center;
-       }
+  .btn-clear:hover { border-color: var(--red); color: var(--red); }
 
-       .modal.active {
-           display: flex;
-       }
+  .status-text {
+    flex: 1;
+    font-size: 0.75em;
+    color: var(--muted);
+    text-align: right;
+  }
 
-       .modal-content {
-           background: white;
-           padding: 25px;
-           border-radius: 15px;
-           max-width: 500px;
-           width: 90%;
-           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-       }
+  .status-text.ok { color: var(--accent); }
+  .status-text.error { color: var(--red); }
 
-       .modal-content h3 {
-           margin-bottom: 15px;
-           color: #667eea;
-       }
+  /* CLIENTS LIST */
+  .clients-list {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 100px;
+    overflow-y: auto;
+    background: var(--panel);
+  }
 
-       .modal-content input,
-       .modal-content textarea {
-           width: 100%;
-           padding: 10px;
-           margin: 10px 0;
-           border: 1px solid #d1d5db;
-           border-radius: 8px;
-           font-size: 1em;
-       }
+  .client-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75em;
+    color: var(--muted);
+  }
 
-       .modal-buttons {
-           display: flex;
-           gap: 10px;
-           margin-top: 20px;
-       }
+  .client-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    flex-shrink: 0;
+  }
 
-       .modal-buttons button {
-           flex: 1;
-       }
+  /* WELCOME MSG */
+  .welcome {
+    text-align: center;
+    color: var(--muted);
+    font-size: 0.8em;
+    padding: 20px;
+    line-height: 1.8;
+  }
 
-       .params-label {
-           font-size: 0.85em;
-           color: #6b7280;
-           margin-top: 5px;
-       }
-   </style>
+  .welcome strong { color: var(--accent); }
+</style>
 </head>
 <body>
-   <div class="container">
-       <!-- Panel Izquierdo: Scripts -->
-       <div class="panel">
-           <div class="header">
-               <h2>📚 Mis Scripts</h2>
-               <span class="status">✓ Listo</span>
-           </div>
 
-           <div class="scripts-list" id="scriptsList"></div>
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="logo">RBX<span>Executor</span></div>
+  <div class="connections">
+    <div class="dot" id="dot"></div>
+    <span id="connLabel" style="color:var(--muted)">0 conectados</span>
+  </div>
+</div>
 
-           <div class="button-group">
-               <button class="btn-primary" onclick="openNewScriptModal()">
-                   ➕ Nuevo
-               </button>
-               <button class="btn-secondary" onclick="syncScripts()">
-                   🔄 Sincronizar
-               </button>
-           </div>
+<!-- MAIN -->
+<div class="main">
 
-           <div class="stats">
-               <div class="stat">
-                   <div class="stat-value" id="scriptCount">0</div>
-                   <div class="stat-label">Scripts</div>
-               </div>
-               <div class="stat">
-                   <div class="stat-value" id="totalSize">0KB</div>
-                   <div class="stat-label">Total</div>
-               </div>
-           </div>
+  <!-- PANEL IZQUIERDO: CHAT CON IA -->
+  <div class="panel-left">
+    <div class="panel-header">
+      <span>Chat IA</span>
+      <span class="tag">Claude</span>
+    </div>
 
-           <div class="info-panel">
-               <h4>💡 Cómo Funciona</h4>
-               <p>1. Creas script en la app</p>
-               <p>2. Agregas parámetros JSON</p>
-               <p>3. Presionas ⚡ Ejecutar</p>
-               <p>4. Se inyecta en Roblox automático</p>
-           </div>
-       </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="welcome">
+        <strong>Hola.</strong><br>
+        Dime qué script quieres y lo creo automáticamente.<br><br>
+        Ejemplo:<br>
+        <em>"Crea un script de velocidad con UI mobile"</em><br>
+        <em>"Haz un script para volar"</em><br>
+        <em>"Script que muestre ESP de jugadores"</em>
+      </div>
+    </div>
 
-       <!-- Panel Derecho: Editor -->
-       <div class="panel">
-           <div class="header">
-               <h2>✏️ Editor</h2>
-           </div>
+    <div class="chat-input-area">
+      <textarea
+        class="chat-input"
+        id="chatInput"
+        placeholder="Describe el script que quieres..."
+        rows="1"
+      ></textarea>
+      <button class="btn-send" id="btnSend" onclick="sendMessage()">Crear</button>
+    </div>
+  </div>
 
-           <div class="editor-header">
-               <input 
-                   type="text" 
-                   id="scriptName" 
-                   placeholder="Nombre del script"
-                   value="nuevo_script.lua"
-               >
-               <button class="btn-success" onclick="saveScript()" style="flex: 0;">
-                   💾 Guardar
-               </button>
-           </div>
+  <!-- PANEL DERECHO: EDITOR + EXECUTE -->
+  <div class="panel-right">
+    <div class="panel-header">
+      <span>Script Editor</span>
+    </div>
 
-           <textarea 
-               id="scriptCode" 
-               placeholder="Código Lua aquí..."
-           ></textarea>
+    <textarea
+      class="code-area"
+      id="codeArea"
+      placeholder="-- El script generado aparecerá aquí
+-- También puedes escribir o editar directamente"
+    ></textarea>
 
-           <!-- Parámetros -->
-           <div class="editor-header" style="margin-top: 10px;">
-               <textarea 
-                   id="scriptParams" 
-                   placeholder='Parámetros JSON: { "speed": 100, "jump": 50 }'
-                   style="height: 60px; flex: 1; margin: 0;"
-               ></textarea>
-           </div>
+    <div class="execute-bar">
+      <button class="btn-execute" id="btnExecute" onclick="executeScript()">
+        ⚡ EXECUTE
+      </button>
+      <button class="btn-clear" onclick="clearCode()">Limpiar</button>
+      <span class="status-text" id="statusText">Listo</span>
+    </div>
 
-           <!-- Botones de Ejecución -->
-           <div class="button-group" style="margin-top: 10px;">
-               <button class="btn-success" onclick="executeScript()">
-                   ⚡ Ejecutar en Roblox
-               </button>
-               <button class="btn-danger" onclick="deleteCurrentScript()">
-                   🗑️ Eliminar
-               </button>
-           </div>
+    <!-- CLIENTES CONECTADOS -->
+    <div class="clients-list" id="clientsList">
+      <div class="client-item" style="color:var(--muted)">
+        <span>Sin conexiones activas</span>
+      </div>
+    </div>
+  </div>
 
-           <!-- Consola -->
-           <div class="console" id="console">
-               <div class="console-log">📝 Esperando ejecución...</div>
-           </div>
-       </div>
-   </div>
+</div>
 
-   <!-- Modal: Nuevo Script -->
-   <div class="modal" id="newScriptModal">
-       <div class="modal-content">
-           <h3>📝 Crear Nuevo Script</h3>
-           <input 
-               type="text" 
-               id="newScriptName" 
-               placeholder="Nombre (ej: velocidad.lua)"
-           >
-           <select id="scriptTemplate">
-               <option value="">-- Plantilla --</option>
-               <option value="speed">Velocidad</option>
-               <option value="jump">Salto</option>
-               <option value="fly">Volar</option>
-               <option value="invisible">Invisible</option>
-               <option value="empty">Vacío</option>
-           </select>
-           <div class="modal-buttons">
-               <button class="btn-primary" onclick="createNewScript()">Crear</button>
-               <button class="btn-secondary" onclick="closeNewScriptModal()">Cancelar</button>
-           </div>
-       </div>
-   </div>
+<script>
+const API = 'https://mcproblox-production.up.railway.app';
+const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 
-   <script>
-       // ========== VARIABLES GLOBALES ==========
-       let scripts = {};
-       let currentScript = null;
-       const API_BASE = window.location.origin;
+let currentExecId = null;
+let pollInterval = null;
 
-       // ========== TEMPLATES ==========
-       const templates = {
-           speed: `local Players = game:GetService("Players")
-local player = Players:GetFirstChildOfClass("Player")
+// ============================================================
+// POLLING - ESTADO CADA 3 SEGUNDOS
+// ============================================================
 
-if player and player.Character then
-   local humanoid = player.Character:FindFirstChild("Humanoid")
-   if humanoid then
-       humanoid.WalkSpeed = params.speed or 50
-       print("Velocidad: " .. (params.speed or 50))
-   end
-end`,
-           jump: `local Players = game:GetService("Players")
-local player = Players:GetFirstChildOfClass("Player")
+async function pollStatus() {
+  try {
+    const res = await fetch(API + '/api/status');
+    const data = await res.json();
 
-if player and player.Character then
-   local humanoid = player.Character:FindFirstChild("Humanoid")
-   if humanoid then
-       humanoid.JumpPower = params.jump or 50
-       print("Salto: " .. (params.jump or 50))
-   end
-end`,
-           fly: `local Players = game:GetService("Players")
-local player = Players:GetFirstChildOfClass("Player")
+    const count = data.connections || 0;
+    const dot = document.getElementById('dot');
+    const label = document.getElementById('connLabel');
 
-if player and player.Character then
-   local rootPart = player.Character:FindFirstChild("HumanoidRootPart")
-   if rootPart then
-       local bodyVelocity = Instance.new("BodyVelocity")
-       bodyVelocity.Parent = rootPart
-       bodyVelocity.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
-       bodyVelocity.Velocity = Vector3.new(0, 50, 0)
-       print("Volando!")
-   end
-end`,
-           invisible: `local Players = game:GetService("Players")
-local player = Players:GetFirstChildOfClass("Player")
+    if (count > 0) {
+      dot.classList.add('active');
+      label.textContent = count + (count === 1 ? ' conectado' : ' conectados');
+      label.style.color = 'var(--accent)';
+    } else {
+      dot.classList.remove('active');
+      label.textContent = '0 conectados';
+      label.style.color = 'var(--muted)';
+    }
 
-if player and player.Character then
-   for _, part in pairs(player.Character:GetDescendants()) do
-       if part:IsA("BasePart") then
-           part.Transparency = params.transparency or 0.5
-       end
-   end
-   print("Invisible!")
-end`,
-           empty: `-- Tu código aquí`
-       };
+    // Lista de clientes
+    const list = document.getElementById('clientsList');
+    if (data.clients && data.clients.length > 0) {
+      list.innerHTML = data.clients.map(c => `
+        <div class="client-item">
+          <div class="client-dot"></div>
+          <span>${c.player || 'Unknown'} · ${c.game || 'Unknown'}</span>
+        </div>
+      `).join('');
+    } else {
+      list.innerHTML = '<div class="client-item"><span style="color:var(--muted)">Sin conexiones activas</span></div>';
+    }
 
-       // ========== INICIALIZACIÓN ==========
-       window.addEventListener('load', () => {
-           loadScripts();
-       });
+    // Verificar resultado si estamos esperando
+    if (currentExecId) {
+      checkResult(currentExecId);
+    }
+  } catch (e) {
+    // silencioso
+  }
+}
 
-       // ========== GESTIÓN DE SCRIPTS ==========
-       function loadScripts() {
-           const saved = localStorage.getItem('allScripts');
-           scripts = saved ? JSON.parse(saved) : {};
-           renderScriptsList();
-       }
+setInterval(pollStatus, 3000);
+pollStatus();
 
-       function saveScripts() {
-           localStorage.setItem('allScripts', JSON.stringify(scripts));
-           renderScriptsList();
-       }
+// ============================================================
+// CLAUDE - GENERAR SCRIPT
+// ============================================================
 
-       function renderScriptsList() {
-           const listEl = document.getElementById('scriptsList');
-           listEl.innerHTML = '';
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const msg = input.value.trim();
+  if (!msg) return;
 
-           let totalSize = 0;
+  addMessage('user', msg);
+  input.value = '';
+  input.style.height = 'auto';
 
-           Object.entries(scripts).forEach(([name, code]) => {
-               totalSize += new Blob([code]).size;
+  const btnSend = document.getElementById('btnSend');
+  btnSend.disabled = true;
 
-               const item = document.createElement('div');
-               item.className = `script-item ${currentScript === name ? 'active' : ''}`;
-               item.onclick = () => loadScript(name);
+  const aiMsgEl = addMessage('ai', '', true); // typing
 
-               const size = (new Blob([code]).size / 1024).toFixed(2);
-               item.innerHTML = `
-                   <div>
-                       <div class="script-name">${name}</div>
-                       <div class="script-size">${size} KB</div>
-                   </div>
-               `;
-               listEl.appendChild(item);
-           });
+  try {
+    const res = await fetch(ANTHROPIC_API, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': '',  // Se maneja por el servidor
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2000,
+        system: `Eres un experto en Lua y Roblox. El usuario te pide scripts Lua para ejecutar en Roblox.
 
-           document.getElementById('scriptCount').textContent = Object.keys(scripts).length;
-           document.getElementById('totalSize').textContent = (totalSize / 1024).toFixed(1) + 'KB';
-       }
+REGLAS IMPORTANTES:
+- Responde SOLO con el código Lua, sin explicaciones ni markdown
+- Sin bloques de código (no uses \`\`\`)
+- El código debe ser ejecutable directamente en Roblox
+- Usa LocalScript si es algo visual/UI, Script si es servidor
+- Los scripts deben funcionar desde un exploit executor (cliente)
+- Para UI mobile, usa ScreenGui con botones grandes
+- Variables locales siempre
+- El código debe ser completo y funcional`,
+        messages: [{ role: 'user', content: msg }]
+      })
+    });
 
-       function loadScript(name) {
-           currentScript = name;
-           document.getElementById('scriptName').value = name;
-           document.getElementById('scriptCode').value = scripts[name];
-           document.getElementById('scriptParams').value = '';
-           renderScriptsList();
-       }
+    const data = await res.json();
 
-       function saveScript() {
-           const name = document.getElementById('scriptName').value.trim();
-           const code = document.getElementById('scriptCode').value;
+    if (data.content && data.content[0]) {
+      const code = data.content[0].text.trim();
+      
+      // Actualizar burbuja de IA
+      aiMsgEl.querySelector('.msg-bubble').textContent = '✓ Script creado. Revísalo en el editor.';
+      aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
+      
+      // Poner en editor
+      document.getElementById('codeArea').value = code;
+      setStatus('Script listo. Presiona EXECUTE para ejecutar.', '');
+    } else {
+      aiMsgEl.querySelector('.msg-bubble').textContent = 'Error al generar script.';
+      aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
+    }
+  } catch (e) {
+    aiMsgEl.querySelector('.msg-bubble').textContent = 'Error de conexión con la IA.';
+    aiMsgEl.querySelector('.msg-bubble').classList.remove('typing');
+  }
 
-           if (!name) {
-               addConsoleLog('Error: Nombre vacío', 'error');
-               return;
-           }
+  btnSend.disabled = false;
+}
 
-           scripts[name] = code;
-           currentScript = name;
-           saveScripts();
-           addConsoleLog(`✓ Script "${name}" guardado`, 'success');
-       }
+// ============================================================
+// EXECUTE - ENVIAR SCRIPT A ROBLOX
+// ============================================================
 
-       function deleteCurrentScript() {
-           if (!currentScript) {
-               addConsoleLog('Error: Sin script seleccionado', 'error');
-               return;
-           }
+async function executeScript() {
+  const code = document.getElementById('codeArea').value.trim();
+  if (!code) {
+    setStatus('No hay código para ejecutar.', 'error');
+    return;
+  }
 
-           if (confirm(`¿Eliminar "${currentScript}"?`)) {
-               delete scripts[currentScript];
-               currentScript = null;
-               saveScripts();
-               document.getElementById('scriptName').value = '';
-               document.getElementById('scriptCode').value = '';
-               addConsoleLog('✓ Script eliminado', 'success');
-           }
-       }
+  const btn = document.getElementById('btnExecute');
+  btn.disabled = true;
+  setStatus('Enviando a Roblox...', '');
 
-       // ========== MODAL ==========
-       function openNewScriptModal() {
-           document.getElementById('newScriptModal').classList.add('active');
-       }
+  try {
+    const res = await fetch(API + '/api/execute', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
 
-       function closeNewScriptModal() {
-           document.getElementById('newScriptModal').classList.remove('active');
-       }
+    const data = await res.json();
 
-       function createNewScript() {
-           const name = document.getElementById('newScriptName').value.trim();
-           const template = document.getElementById('scriptTemplate').value;
+    if (data.success) {
+      currentExecId = data.executionId;
+      setStatus('Esperando resultado...', '');
+      
+      // Esperar resultado hasta 15 segundos
+      let attempts = 0;
+      const check = setInterval(async () => {
+        attempts++;
+        const result = await checkResult(currentExecId);
+        if (result || attempts > 15) {
+          clearInterval(check);
+          btn.disabled = false;
+          if (!result) setStatus('Timeout. ¿Está conectado Roblox?', 'error');
+        }
+      }, 1000);
+    } else {
+      setStatus('Error: ' + data.error, 'error');
+      btn.disabled = false;
+    }
+  } catch (e) {
+    setStatus('Error de conexión.', 'error');
+    btn.disabled = false;
+  }
+}
 
-           if (!name) {
-               alert('Ingresa un nombre');
-               return;
-           }
+async function checkResult(execId) {
+  try {
+    const res = await fetch(API + '/api/result/' + execId);
+    const data = await res.json();
 
-           if (scripts[name]) {
-               alert('Ya existe');
-               return;
-           }
+    if (data.success && data.result) {
+      currentExecId = null;
+      if (data.result.success) {
+        setStatus('✓ Ejecutado en Roblox', 'ok');
+        addMessage('ai', '✓ Script ejecutado correctamente en Roblox.\nOutput: ' + (data.result.output || 'completado'));
+      } else {
+        setStatus('✗ Error en Roblox', 'error');
+        addMessage('ai', '✗ Error al ejecutar: ' + (data.result.error || 'desconocido'));
+      }
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
 
-           const code = template ? (templates[template] || templates.empty) : templates.empty;
-           scripts[name] = code;
-           currentScript = name;
-           saveScripts();
-           loadScript(name);
-           closeNewScriptModal();
-           addConsoleLog(`✓ Script "${name}" creado`, 'success');
+// ============================================================
+// UI HELPERS
+// ============================================================
 
-           document.getElementById('newScriptName').value = '';
-           document.getElementById('scriptTemplate').value = '';
-       }
+function addMessage(role, text, typing = false) {
+  const container = document.getElementById('chatMessages');
+  
+  // Quitar welcome si existe
+  const welcome = container.querySelector('.welcome');
+  if (welcome) welcome.remove();
 
-       // ========== EJECUCIÓN EN ROBLOX ==========
-       async function executeScript() {
-           const name = document.getElementById('scriptName').value;
-           const code = document.getElementById('scriptCode').value;
-           const paramsText = document.getElementById('scriptParams').value;
+  const msg = document.createElement('div');
+  msg.className = `msg ${role}`;
+  msg.innerHTML = `
+    <div class="msg-label">${role === 'user' ? 'Tú' : 'IA'}</div>
+    <div class="msg-bubble ${typing ? 'typing' : ''}">${text}</div>
+  `;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+  return msg;
+}
 
-           let parameters = {};
-           
-           // Parsear parámetros JSON
-           if (paramsText.trim()) {
-               try {
-                   parameters = JSON.parse(paramsText);
-               } catch (e) {
-                   addConsoleLog('Error: JSON inválido en parámetros', 'error');
-                   return;
-               }
-           }
+function setStatus(text, type) {
+  const el = document.getElementById('statusText');
+  el.textContent = text;
+  el.className = 'status-text' + (type ? ' ' + type : '');
+}
 
-           addConsoleLog('⚡ Inyectando en Roblox...', 'warn');
+function clearCode() {
+  document.getElementById('codeArea').value = '';
+  setStatus('Listo', '');
+}
 
-           try {
-               const response = await fetch(API_BASE + '/api/execute-remote', {
-                   method: 'POST',
-                   headers: { 'Content-Type': 'application/json' },
-                   body: JSON.stringify({ 
-                       scriptName: name, 
-                       code: code,
-                       parameters: parameters
-                   })
-               });
+// Auto-resize textarea
+document.getElementById('chatInput').addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
 
-               const result = await response.json();
-
-               if (result.success) {
-                   addConsoleLog(`✓ Inyectado (ID: ${result.executionId})`, 'success');
-                   addConsoleLog(`Esperando resultado...`, 'info');
-                   
-                   // Esperar resultado cada 2 segundos
-                   let attempts = 0;
-                   const checkStatus = setInterval(async () => {
-                       attempts++;
-                       try {
-                           const statusRes = await fetch(API_BASE + `/api/execution/${result.executionId}/status`);
-                           const status = await statusRes.json();
-                           
-                           if (status.execution.status === 'completed') {
-                               clearInterval(checkStatus);
-                               if (status.execution.result.success) {
-                                   addConsoleLog(`✓ Ejecutado: ${status.execution.result.output}`, 'success');
-                               } else {
-                                   addConsoleLog(`✗ Error: ${status.execution.result.error}`, 'error');
-                               }
-                           }
-                       } catch (e) {
-                           if (attempts > 15) clearInterval(checkStatus);
-                       }
-                   }, 2000);
-               } else {
-                   addConsoleLog(`✗ ${result.error}`, 'error');
-               }
-           } catch (error) {
-               addConsoleLog('Error de conexión al servidor', 'error');
-           }
-       }
-
-       function syncScripts() {
-           addConsoleLog(`🔄 ${Object.keys(scripts).length} scripts sincronizados`, 'info');
-       }
-
-       // ========== CONSOLA ==========
-       function addConsoleLog(message, type = 'log') {
-           const console = document.getElementById('console');
-           const log = document.createElement('div');
-           log.className = `console-log console-${type}`;
-           log.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-           console.appendChild(log);
-           console.scrollTop = console.scrollHeight;
-
-           while (console.children.length > 50) {
-               console.removeChild(console.firstChild);
-           }
-       }
-   </script>
+// Enter para enviar
+document.getElementById('chatInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+});
+</script>
 </body>
 </html>
