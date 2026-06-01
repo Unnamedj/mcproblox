@@ -27,7 +27,7 @@ setInterval(() => {
     });
 }, 10000);
 
-// ── HTTPS helper (sin node-fetch) ──────────────────────
+// ── HTTPS helper ───────────────────────────────────────
 function httpsPost(hostname, path, headers, body) {
     return new Promise((resolve, reject) => {
         const data = JSON.stringify(body);
@@ -45,7 +45,7 @@ function httpsPost(hostname, path, headers, body) {
             res.on('data', chunk => raw += chunk);
             res.on('end', () => {
                 try { resolve(JSON.parse(raw)); }
-                catch(e) { reject(new Error('JSON parse error: ' + raw)); }
+                catch(e) { reject(new Error('JSON parse')); }
             });
         });
         req.on('error', reject);
@@ -102,52 +102,87 @@ app.get('/api/status', (req, res) => {
     res.json({ success: true, connections: connections.length, clients: connections });
 });
 
-app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.1.0' }));
-
-// ── CLAUDE PROXY ───────────────────────────────────────
+// ── IA PROXY ────────────────────────────────────────────
 app.post('/api/ai', async (req, res) => {
-    const { message } = req.body;
+    const { message, model } = req.body;
     if (!message) return res.status(400).json({ success: false, error: 'Sin mensaje' });
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return res.status(500).json({ success: false, error: 'API key no configurada en Railway Variables' });
+    const systemPrompt = `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit.
+REGLAS:
+- SOLO código Lua, sin explicaciones
+- Sin markdown, sin backticks
+- Funciona desde contexto cliente
+- UI mobile: ScreenGui, botones 50px+ alto
+- Variables locales
+- Código 100% funcional`;
 
     try {
-        const data = await httpsPost(
-            'api.anthropic.com',
-            '/v1/messages',
-            {
-                'Content-Type': 'application/json',
-                'x-api-key': apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            {
-                model: 'claude-sonnet-4-6',
-                max_tokens: 2000,
-                system: `Eres un experto en Lua y Roblox. Creas scripts Lua para ejecutar desde un exploit executor en Roblox.
+        let result;
 
-REGLAS ESTRICTAS:
-- Responde SOLO con código Lua puro
-- CERO explicaciones, CERO markdown, CERO backticks
-- Funciona desde contexto LocalScript (cliente)
-- Para UI mobile: ScreenGui con botones grandes táctiles (min 50px alto)
-- Variables siempre locales
-- Código 100% completo y funcional`,
-                messages: [{ role: 'user', content: message }]
+        // CLAUDE
+        if (model === 'claude-haiku' || model === 'claude-sonnet') {
+            const apiKey = process.env.ANTHROPIC_API_KEY;
+            if (!apiKey) return res.status(500).json({ success: false, error: 'Falta API key Anthropic' });
+
+            result = await httpsPost(
+                'api.anthropic.com',
+                '/v1/messages',
+                {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                {
+                    model: model === 'claude-haiku' ? 'claude-3-5-haiku-20241022' : 'claude-sonnet-4-6',
+                    max_tokens: 2000,
+                    system: systemPrompt,
+                    messages: [{ role: 'user', content: message }]
+                }
+            );
+
+            if (result.content && result.content[0]) {
+                res.json({ success: true, code: result.content[0].text.trim() });
+            } else {
+                res.json({ success: false, error: result.error?.message || 'Sin respuesta Claude' });
             }
-        );
+        }
+        // GEMINI
+        else if (model === 'gemini-flash' || model === 'gemini-pro') {
+            const apiKey = process.env.GEMINI_API_KEY;
+            if (!apiKey) return res.status(500).json({ success: false, error: 'Falta API key Gemini' });
 
-        if (data.content && data.content[0]) {
-            res.json({ success: true, code: data.content[0].text.trim() });
-        } else {
-            console.error('Anthropic error:', JSON.stringify(data));
-            res.json({ success: false, error: data.error?.message || 'Sin respuesta de IA' });
+            result = await httpsPost(
+                'generativelanguage.googleapis.com',
+                `/v1beta/models/${model === 'gemini-flash' ? 'gemini-2.0-flash' : 'gemini-pro'}:generateContent?key=${apiKey}`,
+                { 'Content-Type': 'application/json' },
+                {
+                    system_instruction: { parts: { text: systemPrompt } },
+                    contents: [{
+                        parts: [{ text: message }]
+                    }],
+                    generationConfig: {
+                        maxOutputTokens: 2000,
+                        temperature: 0.7
+                    }
+                }
+            );
+
+            if (result.candidates && result.candidates[0]?.content?.parts[0]) {
+                res.json({ success: true, code: result.candidates[0].content.parts[0].text.trim() });
+            } else {
+                res.json({ success: false, error: result.error?.message || 'Sin respuesta Gemini' });
+            }
+        }
+        else {
+            res.status(400).json({ success: false, error: 'Modelo desconocido' });
         }
     } catch(e) {
-        console.error('Error Claude:', e.message);
+        console.error('Error IA:', e.message);
         res.status(500).json({ success: false, error: e.message });
     }
 });
+
+app.get('/api/health', (req, res) => res.json({ status: 'ok', version: '4.2.0' }));
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
@@ -155,5 +190,6 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`🚀 Puerto: ${PORT}`);
-    console.log(`🔑 API Key: ${process.env.ANTHROPIC_API_KEY ? '✓ Configurada' : '✗ FALTA'}`);
+    console.log(`🔑 Claude: ${process.env.ANTHROPIC_API_KEY ? '✓' : '✗'}`);
+    console.log(`🔑 Gemini: ${process.env.GEMINI_API_KEY ? '✓' : '✗'}`);
 });
